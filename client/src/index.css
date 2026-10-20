@@ -1,0 +1,158 @@
+
+@import "tailwindcss";
+
+/* ========================================
+   1. Light theme variables
+======================================== */
+
+:root {
+  color-scheme: light;
+
+  --color-bg: #f8f8fa;
+  --color-surface: #ffffff;
+  --color-surface-secondary: #f3f2f6;
+  --color-text: #24212b;
+  --color-text-secondary: #706b7b;
+  --color-border: #e8e5ed;
+
+  /* Muted purple accent */
+  --color-accent: #7c5cba;
+  --color-accent-hover: #6848a5;
+  --color-accent-soft: #f0ebf8;
+  --color-accent-text: #624397;
+
+  /* Status colors */
+  --color-success-bg: #e5f4e9;
+  --color-success-text: #28633b;
+  --color-warning-bg: #fbf1d9;
+  --color-warning-text: #87651b;
+  --color-danger-bg: #fbe9e8;
+  --color-danger-text: #a13e3a;
+
+  --color-shadow: 0 4px 20px rgb(30 20 45 / 4%);
+
+  --radius-card: 16px;
+  --radius-control: 10px;
+}
+
+/* ========================================
+   2. Dark theme variables
+======================================== */
+
+
+:root.dark {
+  color-scheme: dark;
+
+  /* Deep, neutral dark surfaces */
+  --color-bg: #050506;
+  --color-surface: #0c0c0f;
+  --color-surface-secondary: #151519;
+  --color-text: #e7e5eb;
+  --color-text-secondary: #96929f;
+  --color-border: #242329;
+
+  /* Muted purple accent */
+  --color-accent: #a78bd4;
+  --color-accent-hover: #bca5e4;
+  --color-accent-soft: #21182e;
+  --color-accent-text: #cbb7eb;
+
+  /* Status colors */
+  --color-success-bg: #10251a;
+  --color-success-text: #86c99a;
+  --color-warning-bg: #2a2110;
+  --color-warning-text: #e4c477;
+  --color-danger-bg: #2b1517;
+  --color-danger-text: #e99b9b;
+
+  --color-shadow: 0 4px 24px rgb(0 0 0 / 40%);
+}
+
+
+/* ========================================
+   3. Global styles
+======================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: var(--color-bg);
+}
+
+body,
+#root {
+  min-height: 100vh;
+  margin: 0;
+}
+
+body {
+ font-family: "Inter", -apple-system, BlinkMacSystemFont,
+  "Segoe UI", sans-serif;
+
+  background: var(--color-bg);
+  color: var(--color-text);
+
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ========================================
+   4. Shared elements
+======================================== */
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+textarea,
+select {
+  color: var(--color-text);
+}
+
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* ========================================
+   5. Scrollbar
+======================================== */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+}

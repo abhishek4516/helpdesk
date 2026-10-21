@@ -8,6 +8,7 @@ import dotenv from 'dotenv'
 import { testDatabaseConnection } from './config/database.js'
 import authRoutes from './routes/auth.routes.js'
 import ticketRoutes from './routes/ticket.routes.js'
+import departmentRoutes from './routes/departments.routes.js'
 
 dotenv.config()
 
@@ -30,6 +31,7 @@ app.use(cookieParser())
 // API routes
 app.use('/api/auth', authRoutes)
 app.use('/api/tickets', ticketRoutes)
+app.use('/api/departments', departmentRoutes)
 
 // Health check
 app.get('/api/health', (_req, res) => {

@@ -5,6 +5,7 @@ import Topbar from '../components/layout/Topbar'
 import CreateTicketForm from '../components/tickets/CreateTicketForm'
 import { getTickets, type Ticket } from '../services/ticketService'
 import type { LoggedInUser } from '../types/auth'
+import DepartmentsPage from './DepartmentsPage'
 
 interface DashboardPageProps {
   user: LoggedInUser
@@ -105,7 +106,7 @@ function TicketCard({
       role="button"
       tabIndex={0}
       aria-label={`View ticket ${ticket.ticketCode}`}
-      className="min-w-0 cursor-pointer rounded-xl border p-4 transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] sm:p-5"
+      className="min-w-0 cursor-pointer rounded-xl border p-4 transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-(--color-accent) sm:p-5"
       style={{
         backgroundColor: 'var(--color-surface)',
         borderColor: 'var(--color-border)',
@@ -226,6 +227,7 @@ export default function DashboardPage({
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTickets()
   }, [loadTickets])
 
@@ -440,7 +442,7 @@ export default function DashboardPage({
                     <p className="text-xs font-semibold tracking-wide" style={{ color: 'var(--color-accent)' }}>
                       {selectedTicket.ticketCode}
                     </p>
-                    <h2 className="mt-2 break-words text-2xl font-semibold tracking-tight" style={{ color: 'var(--color-text)' }}>
+                    <h2 className="mt-2 wrap-break-word text-2xl font-semibold tracking-tight" style={{ color: 'var(--color-text)' }}>
                       {selectedTicket.title}
                     </h2>
                   </div>
@@ -667,29 +669,7 @@ export default function DashboardPage({
         )
 
       case 'departments':
-        return (
-          <section
-            className="rounded-xl border p-6 sm:p-8"
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              borderColor: 'var(--color-border)',
-            }}
-          >
-            <h2
-              className="text-lg font-semibold"
-              style={{ color: 'var(--color-text)' }}
-            >
-              Departments
-            </h2>
-            <p
-              className="mt-2 text-sm leading-6"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              Department management will be implemented when we connect the
-              department API.
-            </p>
-          </section>
-        )
+  return <DepartmentsPage />
 
       default:
         return (

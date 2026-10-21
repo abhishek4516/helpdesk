@@ -15,7 +15,7 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
         </div>
 
         <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">
-          Employee Helpdesk
+           Helpdesk
         </p>
 
         <h1 className="mt-3 text-3xl font-bold tracking-tight text-slate-900">

@@ -39,74 +39,197 @@ export default function DepartmentsPage() {
       }
     }
 
-    loadDepartments()
+    void loadDepartments()
   }, [])
 
   return (
     <div className="space-y-6">
+      {/* Page heading */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">
+        <h1
+          className="text-2xl font-semibold tracking-tight"
+          style={{ color: 'var(--color-text)' }}
+        >
           Department Management
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p
+          className="mt-1 text-sm"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
           View and manage your organization's departments.
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="font-semibold text-gray-900">
-            All Departments
-          </h2>
+      {/* Departments table */}
+      <section
+        className="overflow-hidden rounded-xl border"
+        style={{
+          backgroundColor: 'var(--color-surface)',
+          borderColor: 'var(--color-border)',
+        }}
+      >
+        <div
+          className="flex items-center justify-between border-b px-5 py-4 sm:px-6"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          <div>
+            <h2
+              className="font-semibold"
+              style={{ color: 'var(--color-text)' }}
+            >
+              All Departments
+            </h2>
+            <p
+              className="mt-1 text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              {departments.length}{' '}
+              {departments.length === 1 ? 'department' : 'departments'}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            disabled={loading}
+            className="rounded-lg border px-3 py-2 text-sm font-medium transition hover:opacity-75 disabled:opacity-50"
+            style={{
+              borderColor: 'var(--color-border)',
+              color: 'var(--color-text)',
+            }}
+          >
+            Refresh
+          </button>
         </div>
 
         {loading ? (
-          <p className="p-6 text-sm text-gray-500">
+          <div
+            className="px-6 py-12 text-center text-sm"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <div
+              className="mx-auto mb-3 size-6 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden="true"
+            />
             Loading departments...
-          </p>
+          </div>
         ) : error ? (
-          <p className="p-6 text-sm text-red-600">{error}</p>
+          <div className="px-6 py-10 text-center">
+            <p
+              role="alert"
+              className="text-sm"
+              style={{ color: 'var(--color-danger-text)' }}
+            >
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 text-sm font-semibold"
+              style={{ color: 'var(--color-accent)' }}
+            >
+              Try again
+            </button>
+          </div>
         ) : departments.length === 0 ? (
-          <p className="p-6 text-sm text-gray-500">
-            No departments found.
-          </p>
+          <div className="px-6 py-12 text-center">
+            <p
+              className="font-medium"
+              style={{ color: 'var(--color-text)' }}
+            >
+              No departments found
+            </p>
+            <p
+              className="mt-1 text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              Departments will appear here once they are added.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="bg-gray-50 text-gray-500">
+              <thead
+                style={{
+                  backgroundColor: 'var(--color-surface-secondary)',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
                 <tr>
-                  <th className="px-6 py-3 font-medium">Department</th>
-                  <th className="px-6 py-3 font-medium">Code</th>
-                  <th className="px-6 py-3 font-medium">Department Head</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium sm:px-6">
+                    Department
+                  </th>
+                  <th className="px-5 py-3 font-medium sm:px-6">Code</th>
+                  <th className="px-5 py-3 font-medium sm:px-6">
+                    Department Head
+                  </th>
+                  <th className="px-5 py-3 font-medium sm:px-6">Status</th>
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {departments.map((department) => {
                   const active =
                     department.is_active === true ||
                     department.is_active === 1
 
                   return (
-                    <tr key={department.id}>
-                      <td className="px-6 py-4 font-medium text-gray-900">
+                    <tr
+                      key={department.id}
+                      className="transition-colors hover:opacity-90"
+                      style={{
+                        borderTop: '1px solid var(--color-border)',
+                      }}
+                    >
+                      <td
+                        className="px-5 py-4 font-medium sm:px-6"
+                        style={{ color: 'var(--color-text)' }}
+                      >
                         {department.name}
                       </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {department.department_code}
+
+                      <td
+                        className="px-5 py-4 sm:px-6"
+                        style={{ color: 'var(--color-text-secondary)' }}
+                      >
+                        <span
+                          className="rounded-md px-2 py-1 font-mono text-xs"
+                          style={{
+                            backgroundColor: 'var(--color-surface-secondary)',
+                            color: 'var(--color-text)',
+                          }}
+                        >
+                          {department.department_code}
+                        </span>
                       </td>
-                      <td className="px-6 py-4 text-gray-600">
+
+                      <td
+                        className="px-5 py-4 sm:px-6"
+                        style={{ color: 'var(--color-text-secondary)' }}
+                      >
                         {department.head_user_id ?? 'Not assigned'}
                       </td>
-                      <td className="px-6 py-4">
+
+                      <td className="px-5 py-4 sm:px-6">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-                            active
-                              ? 'bg-green-50 text-green-700'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}
+                          className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                          style={{
+                            backgroundColor: active
+                              ? 'var(--color-success-bg)'
+                              : 'var(--color-surface-secondary)',
+                            color: active
+                              ? 'var(--color-success-text)'
+                              : 'var(--color-text-secondary)',
+                          }}
                         >
+                          <span
+                            className="size-1.5 rounded-full"
+                            style={{
+                              backgroundColor: active
+                                ? 'var(--color-success-text)'
+                                : 'var(--color-text-secondary)',
+                            }}
+                          />
                           {active ? 'Active' : 'Inactive'}
                         </span>
                       </td>
@@ -117,7 +240,7 @@ export default function DepartmentsPage() {
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }

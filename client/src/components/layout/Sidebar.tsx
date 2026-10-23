@@ -22,7 +22,6 @@ const navigationByRole: Record<
   department_head: [
     { label: 'Overview', id: 'overview', icon: 'grid' },
     { label: 'Department Tickets', id: 'tickets', icon: 'ticket' },
-    { label: 'Employees', id: 'employees', icon: 'users' },
   ],
   employee: [
     { label: 'Overview', id: 'overview', icon: 'grid' },

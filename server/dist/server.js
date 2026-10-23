@@ -11,6 +11,8 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const database_js_1 = require("./config/database.js");
 const auth_routes_js_1 = __importDefault(require("./routes/auth.routes.js"));
 const ticket_routes_js_1 = __importDefault(require("./routes/ticket.routes.js"));
+const departments_routes_js_1 = __importDefault(require("./routes/departments.routes.js"));
+const employees_routes_js_1 = __importDefault(require("./routes/employees.routes.js"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = Number(process.env.PORT) || 5000;
@@ -25,6 +27,8 @@ app.use((0, cookie_parser_1.default)());
 // API routes
 app.use('/api/auth', auth_routes_js_1.default);
 app.use('/api/tickets', ticket_routes_js_1.default);
+app.use('/api/departments', departments_routes_js_1.default);
+app.use('/api/employees', employees_routes_js_1.default);
 // Health check
 app.get('/api/health', (_req, res) => {
     res.json({

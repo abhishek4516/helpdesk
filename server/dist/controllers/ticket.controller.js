@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDepartments = getDepartments;
 exports.createTicket = createTicket;
 exports.getTickets = getTickets;
+exports.assignTicket = assignTicket;
 const node_crypto_1 = require("node:crypto");
 const database_js_1 = require("../config/database.js");
 const ticket_validator_js_1 = require("../validators/ticket.validator.js");
@@ -17,17 +18,11 @@ async function getDepartments(_req, res) {
       WHERE is_active = 1
       ORDER BY name ASC
     `);
-        res.status(200).json({
-            success: true,
-            departments,
-        });
+        res.status(200).json({ success: true, departments });
     }
     catch (error) {
         console.error('Get departments error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Unable to load departments.',
-        });
+        res.status(500).json({ success: false, message: 'Unable to load departments.' });
     }
 }
 async function createTicket(req, res) {
@@ -43,21 +38,13 @@ async function createTicket(req, res) {
         const { title, description, departmentId } = validation.data;
         const user = req.user;
         if (!user) {
-            res.status(401).json({
-                success: false,
-                message: 'Please log in to create a ticket.',
-            });
+            res.status(401).json({ success: false, message: 'Please log in to create a ticket.' });
             return;
         }
         const [departments] = await database_js_1.pool.execute(`SELECT id, name, department_code AS departmentCode
-       FROM departments
-       WHERE id = ? AND is_active = 1
-       LIMIT 1`, [departmentId]);
+       FROM departments WHERE id = ? AND is_active = 1 LIMIT 1`, [departmentId]);
         if (departments.length === 0) {
-            res.status(400).json({
-                success: false,
-                message: 'Please select an active department.',
-            });
+            res.status(400).json({ success: false, message: 'Please select an active department.' });
             return;
         }
         const ticketCode = `HD-${(0, node_crypto_1.randomBytes)(6).toString('hex').toUpperCase()}`;
@@ -81,20 +68,14 @@ async function createTicket(req, res) {
     }
     catch (error) {
         console.error('Create ticket error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Unable to create the ticket. Please try again.',
-        });
+        res.status(500).json({ success: false, message: 'Unable to create the ticket. Please try again.' });
     }
 }
 async function getTickets(req, res) {
     try {
         const user = req.user;
         if (!user) {
-            res.status(401).json({
-                success: false,
-                message: 'Please log in to view tickets.',
-            });
+            res.status(401).json({ success: false, message: 'Please log in to view tickets.' });
             return;
         }
         let sql = `
@@ -107,7 +88,7 @@ async function getTickets(req, res) {
         t.department_id AS departmentId,
         d.name AS departmentName,
         t.requester_user_id AS requesterUserId,
-        u.name AS requesterName,
+        u.full_name AS requesterName,
         t.assigned_employee_id AS assignedEmployeeId,
         t.created_at AS createdAt,
         t.updated_at AS updatedAt
@@ -129,16 +110,55 @@ async function getTickets(req, res) {
         }
         sql += ' ORDER BY t.created_at DESC';
         const [tickets] = await database_js_1.pool.execute(sql, params);
-        res.status(200).json({
-            success: true,
-            tickets,
-        });
+        res.status(200).json({ success: true, tickets });
     }
     catch (error) {
         console.error('Get tickets error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Unable to load tickets.',
-        });
+        res.status(500).json({ success: false, message: 'Unable to load tickets.' });
+    }
+}
+async function assignTicket(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            res.status(401).json({ success: false, message: 'Please log in to assign tickets.' });
+            return;
+        }
+        if (user.role !== 'master') {
+            res.status(403).json({ success: false, message: 'Only the master user can assign tickets.' });
+            return;
+        }
+        const ticketId = Number(req.params.id);
+        const employeeId = Number(req.body.employeeId);
+        if (!Number.isSafeInteger(ticketId) || ticketId <= 0 ||
+            !Number.isSafeInteger(employeeId) || employeeId <= 0) {
+            res.status(400).json({ success: false, message: 'A valid ticket ID and employee ID are required.' });
+            return;
+        }
+        const [tickets] = await database_js_1.pool.execute('SELECT id FROM tickets WHERE id = ? LIMIT 1', [ticketId]);
+        if (tickets.length === 0) {
+            res.status(404).json({ success: false, message: 'Ticket not found.' });
+            return;
+        }
+        // Cross-department assignment is allowed. Only active employees and department heads may be assigned.
+        const [employees] = await database_js_1.pool.execute(`SELECT id FROM users
+       WHERE id = ? AND is_active = 1
+         AND role IN ('employee', 'department_head')
+       LIMIT 1`, [employeeId]);
+        if (employees.length === 0) {
+            res.status(400).json({
+                success: false,
+                message: 'Select an active employee or department head.',
+            });
+            return;
+        }
+        await database_js_1.pool.execute(`UPDATE tickets
+       SET assigned_employee_id = ?, status = CASE WHEN status = 'open' THEN 'assigned' ELSE status END
+       WHERE id = ?`, [employeeId, ticketId]);
+        res.status(200).json({ success: true, message: 'Ticket assigned successfully.' });
+    }
+    catch (error) {
+        console.error('Assign ticket error:', error);
+        res.status(500).json({ success: false, message: 'Unable to assign the ticket. Please try again.' });
     }
 }

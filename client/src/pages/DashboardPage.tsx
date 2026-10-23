@@ -6,10 +6,24 @@ import CreateTicketForm from '../components/tickets/CreateTicketForm'
 import { getTickets, type Ticket } from '../services/ticketService'
 import type { LoggedInUser } from '../types/auth'
 import DepartmentsPage from './DepartmentsPage'
+import EmployeesPage from './EmployeesPage'
 
 interface DashboardPageProps {
   user: LoggedInUser
   onLogout: () => void
+}
+
+interface AssignableEmployee {
+  id: number
+  employeeId: string
+  fullName: string
+  role: 'master' | 'department_head' | 'employee'
+  departmentId: number | null
+  isActive: boolean
+}
+
+type TicketWithAssignment = Ticket & {
+  assignedEmployeeId?: number | null
 }
 
 const pageTitles: Record<string, string> = {
@@ -209,6 +223,11 @@ export default function DashboardPage({
   const [successMessage, setSuccessMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [assignableEmployees, setAssignableEmployees] = useState<AssignableEmployee[]>([])
+  const [loadingEmployees, setLoadingEmployees] = useState(false)
+  const [assignmentEmployeeId, setAssignmentEmployeeId] = useState('')
+  const [savingAssignment, setSavingAssignment] = useState(false)
+  const [assignmentError, setAssignmentError] = useState('')
 
   const loadTickets = useCallback(async () => {
     setLoadingTickets(true)
@@ -226,10 +245,70 @@ export default function DashboardPage({
     }
   }, [])
 
+  const loadAssignableEmployees = useCallback(async () => {
+    if (user.role !== 'master') return
+
+    setLoadingEmployees(true)
+    setAssignmentError('')
+
+    try {
+      const response = await fetch('http://localhost:5000/api/employees', {
+        credentials: 'include',
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to load employees.')
+      }
+
+      // The employee API may expose camelCase or database-style snake_case
+      // fields. Normalize them before filtering so valid employees aren't hidden.
+      const rawEmployees = Array.isArray(data.employees) ? data.employees : []
+      const normalizedEmployees: AssignableEmployee[] = rawEmployees.map(
+        (raw: Record<string, unknown>) => ({
+          id: Number(raw.id),
+          employeeId: String(raw.employeeId ?? raw.employee_id ?? ''),
+          fullName: String(raw.fullName ?? raw.full_name ?? raw.name ?? ''),
+          role: String(raw.role ?? 'employee') as AssignableEmployee['role'],
+          departmentId:
+            raw.departmentId == null && raw.department_id == null
+              ? null
+              : Number(raw.departmentId ?? raw.department_id),
+          isActive:
+            raw.isActive === true ||
+            raw.isActive === 1 ||
+            raw.isActive === '1' ||
+            raw.is_active === true ||
+            raw.is_active === 1 ||
+            raw.is_active === '1',
+        }),
+      )
+
+      setAssignableEmployees(
+        normalizedEmployees.filter(
+          (employee) =>
+            Number.isSafeInteger(employee.id) &&
+            employee.id > 0 &&
+            employee.isActive &&
+            employee.role !== 'master',
+        ),
+      )
+    } catch (error) {
+      setAssignmentError(
+        error instanceof Error ? error.message : 'Unable to load employees.',
+      )
+    } finally {
+      setLoadingEmployees(false)
+    }
+  }, [user.role])
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTickets()
-  }, [loadTickets])
+    if (user.role === 'master') {
+      void loadAssignableEmployees()
+    }
+  }, [loadTickets, loadAssignableEmployees, user.role])
 
   const filteredTickets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -276,6 +355,9 @@ export default function DashboardPage({
   function openTicketDetails(ticket: Ticket) {
     setShowCreateForm(false)
     setSuccessMessage('')
+    setAssignmentError('')
+    const assignedId = (ticket as TicketWithAssignment).assignedEmployeeId
+    setAssignmentEmployeeId(assignedId ? String(assignedId) : '')
     setSelectedTicket(ticket)
     setActivePage('tickets')
   }
@@ -285,6 +367,50 @@ export default function DashboardPage({
     setSuccessMessage('Ticket created successfully!')
     setActivePage('tickets')
     void loadTickets()
+  }
+
+  async function handleAssignTicket() {
+    if (!selectedTicket || !assignmentEmployeeId) {
+      setAssignmentError('Choose an employee before assigning this ticket.')
+      return
+    }
+
+    setSavingAssignment(true)
+    setAssignmentError('')
+    setSuccessMessage('')
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/tickets/${selectedTicket.id}/assign`,
+        {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employeeId: Number(assignmentEmployeeId) }),
+        },
+      )
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Unable to assign this ticket.')
+      }
+
+      setSuccessMessage('Ticket assigned successfully.')
+      await loadTickets()
+      setSelectedTicket((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          assignedEmployeeId: Number(assignmentEmployeeId),
+        } as Ticket
+      })
+    } catch (error) {
+      setAssignmentError(
+        error instanceof Error ? error.message : 'Unable to assign this ticket.',
+      )
+    } finally {
+      setSavingAssignment(false)
+    }
   }
 
   function renderTicketCards(items: Ticket[]) {
@@ -469,6 +595,71 @@ export default function DashboardPage({
                     </div>
                   ))}
                 </div>
+
+                {user.role === 'master' && (
+                  <section
+                    className="space-y-4 border-t pt-5"
+                    style={{ borderColor: 'var(--color-border)' }}
+                  >
+                    <div>
+                      <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Ticket assignment</h3>
+                      <p className="mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                        Assign this ticket to any active employee, regardless of department.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg border p-3" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg)' }}>
+                      <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>Currently assigned to</p>
+                      <p className="mt-1 text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+                        {(() => {
+                          const assignedId = (selectedTicket as TicketWithAssignment).assignedEmployeeId
+                          const assignedEmployee = assignableEmployees.find((employee) => employee.id === assignedId)
+                          return assignedEmployee
+                            ? `${assignedEmployee.fullName} (${assignedEmployee.employeeId})`
+                            : assignedId
+                              ? `Employee database ID ${assignedId}`
+                              : 'Not assigned'
+                        })()}
+                      </p>
+                    </div>
+
+                    {assignmentError && (
+                      <p role="alert" className="text-sm" style={{ color: 'var(--color-danger-text)' }}>{assignmentError}</p>
+                    )}
+
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <select
+                        value={assignmentEmployeeId}
+                        onChange={(event) => { setAssignmentEmployeeId(event.target.value); setAssignmentError('') }}
+                        disabled={loadingEmployees || savingAssignment}
+                        aria-label="Choose employee to assign ticket"
+                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-60"
+                        style={{ backgroundColor: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+                      >
+                        <option value="">{loadingEmployees ? 'Loading employees...' : 'Select an employee'}</option>
+                        {assignableEmployees.map((employee) => (
+                          <option key={employee.id} value={employee.id}>
+                            {employee.fullName} ({employee.employeeId}) — {employee.role.replaceAll('_', ' ')}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleAssignTicket()}
+                        disabled={!assignmentEmployeeId || savingAssignment || loadingEmployees}
+                        className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ backgroundColor: 'var(--color-accent)' }}
+                      >
+                        {savingAssignment ? 'Assigning...' : 'Assign ticket'}
+                      </button>
+                    </div>
+
+                    {!loadingEmployees && assignableEmployees.length === 0 && (
+                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>No active employees are available to assign.</p>
+                    )}
+                  </section>
+                )}
               </section>
             ) : showCreateForm ? (
               <CreateTicketForm
@@ -644,27 +835,19 @@ export default function DashboardPage({
         )
 
       case 'employees':
-        return (
+        return user.role === 'master' ? (
+          <EmployeesPage />
+        ) : (
           <section
+            role="alert"
             className="rounded-xl border p-6 sm:p-8"
             style={{
               backgroundColor: 'var(--color-surface)',
               borderColor: 'var(--color-border)',
+              color: 'var(--color-text-secondary)',
             }}
           >
-            <h2
-              className="text-lg font-semibold"
-              style={{ color: 'var(--color-text)' }}
-            >
-              Employees
-            </h2>
-            <p
-              className="mt-2 text-sm leading-6"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              Employee management will be implemented when we connect the
-              employee API.
-            </p>
+            You do not have permission to access employee management.
           </section>
         )
 

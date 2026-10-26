@@ -9,6 +9,7 @@ interface SidebarProps {
   onLogout: () => void
 }
 
+
 const navigationByRole: Record<
   UserRole,
   { label: string; id: string; icon: string }[]
@@ -16,16 +17,19 @@ const navigationByRole: Record<
   master: [
     { label: 'Overview', id: 'overview', icon: 'grid' },
     { label: 'All Tickets', id: 'tickets', icon: 'ticket' },
+    { label: 'Ticket Transfers', id: 'transfers', icon: 'forward' },
     { label: 'Employees', id: 'employees', icon: 'users' },
     { label: 'Departments', id: 'departments', icon: 'building' },
   ],
   department_head: [
     { label: 'Overview', id: 'overview', icon: 'grid' },
     { label: 'Department Tickets', id: 'tickets', icon: 'ticket' },
+    { label: 'Ticket Transfers', id: 'transfers', icon: 'forward' },
   ],
   employee: [
     { label: 'Overview', id: 'overview', icon: 'grid' },
     { label: 'My Tickets', id: 'tickets', icon: 'ticket' },
+    { label: 'Ticket Transfers', id: 'transfers', icon: 'forward' },
   ],
 }
 
@@ -73,6 +77,14 @@ function NavIcon({ name }: { name: string }) {
         <svg viewBox="0 0 24 24" {...common}>
           <rect x="4" y="3" width="16" height="18" rx="2" />
           <path d="M9 21v-4h6v4M8 7h1m6 0h1M8 11h1m6 0h1" />
+        </svg>
+      )
+
+    case 'forward':
+      return (
+        <svg viewBox="0 0 24 24" {...common}>
+          <path d="M14 5l7 7-7 7" />
+          <path d="M21 12H9a6 6 0 0 0-6 6" />
         </svg>
       )
 

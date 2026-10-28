@@ -239,7 +239,7 @@ export default function Sidebar({
           // IMPORTANT: do not add "relative" here.
           // Mobile uses fixed positioning so the sidebar never pushes
           // dashboard content down.
-          'fixed inset-y-0 left-0 z-50 flex h-[100dvh] max-h-[100dvh] shrink-0 flex-col overflow-visible border-r',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-[100dvh] shrink-0 flex-col overflow-visible border-r',
           'w-[min(18rem,85vw)]',
           'transition-[transform,width] duration-200 ease-in-out',
           // Desktop becomes a normal sticky sidebar.

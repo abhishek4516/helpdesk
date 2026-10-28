@@ -3,6 +3,10 @@ import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import CreateTicketForm from "../components/tickets/CreateTicketForm";
 import { getTickets, type Ticket } from "../services/ticketService";
+import {
+  getTicketLifecycle,
+  type TicketLifecycleEvent,
+} from "../services/ticketLifecycleService";
 import type { LoggedInUser } from "../types/auth";
 import DepartmentsPage from "./DepartmentsPage";
 import EmployeesPage from "./EmployeesPage";
@@ -99,7 +103,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function TicketCard({
+function TicketRow({
   ticket,
   showRequester,
   onClick,
@@ -109,101 +113,47 @@ function TicketCard({
   onClick: () => void;
 }) {
   return (
-    <article
+    <button
+      type="button"
       onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      role="button"
-      tabIndex={0}
       aria-label={`View ticket ${ticket.ticketCode}`}
-      className="min-w-0 cursor-pointer rounded-xl border p-4 transition-colors hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-(--color-accent) sm:p-5"
-      style={{
-        backgroundColor: "var(--color-surface)",
-        borderColor: "var(--color-border)",
-      }}
+      className="group grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b px-3 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--color-accent) sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-4"
+      style={{ borderColor: "var(--color-border)" }}
     >
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p
-            className="truncate text-xs font-semibold tracking-wide"
-            style={{ color: "var(--color-accent)" }}
-          >
-            {ticket.ticketCode}
-          </p>
-
-          <h3
-            className="mt-1.5 break-words text-base font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold"
+          style={{ backgroundColor: "var(--color-accent-soft)", color: "var(--color-accent-text)" }}
+          aria-hidden="true"
+        >
+          {ticket.title.trim().charAt(0).toUpperCase() || "T"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--color-accent)" }}>
+              {ticket.ticketCode}
+            </span>
+            <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>· {formatDate(ticket.createdAt)}</span>
+          </div>
+          <p className="mt-0.5 truncate text-sm font-medium transition-colors group-hover:text-(--color-accent)" style={{ color: "var(--color-text)" }} title={ticket.title}>
             {ticket.title}
-          </h3>
+          </p>
+          {ticket.description && (
+            <p className="mt-0.5 truncate text-xs" style={{ color: "var(--color-text-secondary)" }} title={ticket.description}>
+              {ticket.description}
+            </p>
+          )}
         </div>
-
+      </div>
+      <div className="flex items-center justify-end gap-2 sm:min-w-32 sm:justify-start">
         <StatusBadge status={ticket.status} />
       </div>
-
-      <p
-        className="mt-3 line-clamp-2 break-words text-sm leading-6"
-        style={{ color: "var(--color-text-secondary)" }}
-      >
-        {ticket.description}
-      </p>
-
-      <div
-        className="mt-4 grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        <div className="min-w-0">
-          <p
-            className="text-xs"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
-            Department
-          </p>
-          <p
-            className="mt-1 truncate text-sm font-medium"
-            style={{ color: "var(--color-text)" }}
-          >
-            {ticket.departmentName || "Unassigned"}
-          </p>
-        </div>
-
-        <div className="min-w-0">
-          <p
-            className="text-xs"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
-            {showRequester ? "Requester" : "Created"}
-          </p>
-          <p
-            className="mt-1 truncate text-sm font-medium"
-            style={{ color: "var(--color-text)" }}
-          >
-            {showRequester
-              ? ticket.requesterName || "Not available"
-              : formatDate(ticket.createdAt)}
-          </p>
-        </div>
-
-        {showRequester && (
-          <div className="sm:col-span-2">
-            <p
-              className="text-xs"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Created
-            </p>
-            <p className="mt-1 text-sm" style={{ color: "var(--color-text)" }}>
-              {formatDate(ticket.createdAt)}
-            </p>
-          </div>
-        )}
+      <div className="col-span-2 hidden min-w-0 items-center gap-3 text-xs sm:col-span-1 sm:flex sm:max-w-48" style={{ color: "var(--color-text-secondary)" }}>
+        <span className="truncate">{ticket.departmentName || "Unassigned"}</span>
+        {showRequester && <><span aria-hidden="true">·</span><span className="truncate">{ticket.requesterName || "Requester unavailable"}</span></>}
+        <span className="ml-auto text-base opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">→</span>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -214,6 +164,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   const [ticketError, setTicketError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [lifecycleEvents, setLifecycleEvents] = useState<TicketLifecycleEvent[]>([]);
+  const [loadingLifecycle, setLoadingLifecycle] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -238,6 +191,25 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
       );
     } finally {
       setLoadingTickets(false);
+    }
+  }, []);
+
+  const loadTicketLifecycle = useCallback(async (ticketId: number) => {
+    setLoadingLifecycle(true);
+    setLifecycleError("");
+    setLifecycleEvents([]);
+
+    try {
+      const data = await getTicketLifecycle(ticketId);
+      setLifecycleEvents(data.events);
+    } catch (error) {
+      setLifecycleError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load ticket lifecycle.",
+      );
+    } finally {
+      setLoadingLifecycle(false);
     }
   }, []);
 
@@ -351,6 +323,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     const assignedId = (ticket as TicketWithAssignment).assignedEmployeeId;
     setAssignmentEmployeeId(assignedId ? String(assignedId) : "");
     setSelectedTicket(ticket);
+    void loadTicketLifecycle(ticket.id);
     setActivePage("tickets");
   }
 
@@ -523,9 +496,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     }
 
     return (
-      <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
         {items.map((ticket) => (
-          <TicketCard
+          <TicketRow
             key={ticket.id}
             ticket={ticket}
             showRequester={user.role !== "employee"}
@@ -650,6 +623,162 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                     </div>
                   ))}
                 </div>
+
+                <section
+                  className="space-y-4 border-t pt-5"
+                  style={{ borderColor: "var(--color-border)" }}
+                  aria-labelledby="ticket-lifecycle-heading"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3
+                        id="ticket-lifecycle-heading"
+                        className="text-sm font-semibold"
+                        style={{ color: "var(--color-text)" }}
+                      >
+                        Ticket activity
+                      </h3>
+                      <p
+                        className="mt-1 text-sm"
+                        style={{ color: "var(--color-text-secondary)" }}
+                      >
+                        A timeline of recorded events for this ticket.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void loadTicketLifecycle(selectedTicket.id)}
+                      disabled={loadingLifecycle}
+                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      {loadingLifecycle ? "Refreshing…" : "Refresh activity"}
+                    </button>
+                  </div>
+
+                  {loadingLifecycle ? (
+                    <div
+                      className="rounded-lg border p-4 text-sm"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      Loading ticket activity…
+                    </div>
+                  ) : lifecycleError ? (
+                    <div
+                      role="alert"
+                      className="rounded-lg border p-4"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-bg)",
+                      }}
+                    >
+                      <p className="text-sm" style={{ color: "var(--color-danger-text)" }}>
+                        {lifecycleError}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void loadTicketLifecycle(selectedTicket.id)}
+                        className="mt-2 text-sm font-semibold"
+                        style={{ color: "var(--color-accent)" }}
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : lifecycleEvents.length === 0 ? (
+                    <div
+                      className="rounded-lg border p-4 text-sm"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      No lifecycle events were returned for this ticket yet.
+                    </div>
+                  ) : (
+                    <ol className="space-y-0">
+                      {lifecycleEvents.map((event, index) => {
+                        const record = event as unknown as Record<string, unknown>;
+                        const rawType = String(
+                          record.eventType ?? record.event_type ?? record.type ?? record.action ?? "activity",
+                        );
+                        const heading = String(
+                          record.title ?? record.eventTitle ?? record.event_title ??
+                          rawType.replaceAll("_", " "),
+                        );
+                        const description = record.description ?? record.details ?? record.message;
+                        const actor = record.actorName ?? record.actor_name ?? record.performedBy ?? record.performed_by ?? record.userName ?? record.user_name;
+                        const timestamp = record.createdAt ?? record.created_at ?? record.eventAt ?? record.event_at ?? record.timestamp;
+                        const parsedTimestamp = timestamp ? new Date(String(timestamp)) : null;
+                        const dateLabel = parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
+                          ? parsedTimestamp.toLocaleString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })
+                          : "Time unavailable";
+                        return (
+                          <li key={String(record.id ?? record.eventId ?? record.event_id ?? `${rawType}-${index}`)} className="relative flex gap-3 pb-5 last:pb-0">
+                            <div className="flex w-5 shrink-0 flex-col items-center">
+                              <span
+                                className="mt-1.5 size-2.5 rounded-full ring-4"
+                                style={{
+                                  backgroundColor: "var(--color-accent)",
+                                  outlineColor: "var(--color-accent-soft)",
+                                }}
+                              />
+                              {index < lifecycleEvents.length - 1 && (
+                                <span
+                                  className="mt-2 w-px flex-1"
+                                  style={{ backgroundColor: "var(--color-border)" }}
+                                />
+                              )}
+                            </div>
+                            <div
+                              className="min-w-0 flex-1 rounded-lg border p-3"
+                              style={{
+                                borderColor: "var(--color-border)",
+                                backgroundColor: "var(--color-bg)",
+                              }}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                <h4
+                                  className="text-sm font-semibold capitalize"
+                                  style={{ color: "var(--color-text)" }}
+                                >
+                                  {heading}
+                                </h4>
+                                <time
+                                  className="text-xs"
+                                  style={{ color: "var(--color-text-secondary)" }}
+                                >
+                                  {dateLabel}
+                                </time>
+                              </div>
+                              {actor != null && String(actor).trim() !== "" && (
+                                <p className="mt-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                                  By {String(actor)}
+                                </p>
+                              )}
+                              {description != null && String(description).trim() !== "" && (
+                                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
+                                  {String(description)}
+                                </p>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </section>
 
                 {user.role === "master" && (
                   <section
@@ -840,7 +969,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                 )}
 
                 <section
-                  className="rounded-xl border p-4 sm:p-5"
+                  className="rounded-2xl border p-4 transition-colors sm:p-5"
                   style={{
                     backgroundColor: "var(--color-surface)",
                     borderColor: "var(--color-border)",
@@ -891,7 +1020,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                       aria-label="Filter tickets by status"
                       className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                       style={{
-                        backgroundColor: "var(--color-bg)",
+                        backgroundColor: "transparent",
                         borderColor: "var(--color-border)",
                         color: "var(--color-text)",
                       }}
@@ -973,24 +1102,27 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
         return (
           <div className="space-y-5">
             <section>
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em]" style={{ color: "var(--color-text-secondary)" }}>
+                Dashboard / Overview
+              </p>
               <h2
-                className="text-2xl font-semibold tracking-tight"
+                className="text-2xl font-semibold tracking-tight sm:text-3xl"
                 style={{ color: "var(--color-text)" }}
               >
-                Hello, {user.name.split(" ")[0]}!
+                Welcome back, {user.name}!
               </h2>
               <p
                 className="mt-1.5 text-sm"
                 style={{ color: "var(--color-text-secondary)" }}
               >
-                Here's an overview of your support activity.
+                Here's what's happening with your support tickets today.
               </p>
             </section>
 
             <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 {
-                  label: "Total tickets",
+                  label: "All tickets",
                   value: tickets.length,
                   detail: "Visible to your account",
                 },
@@ -1018,12 +1150,12 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                     borderColor: "var(--color-border)",
                   }}
                 >
-                  <p
-                    className="text-sm"
-                    style={{ color: "var(--color-text-secondary)" }}
-                  >
-                    {stat.label}
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      {stat.label}
+                    </p>
+                    <span className="size-2 rounded-full" style={{ backgroundColor: "var(--color-accent)" }} />
+                  </div>
                   <p
                     className="mt-2 text-3xl font-semibold tracking-tight"
                     style={{ color: "var(--color-text)" }}
@@ -1099,10 +1231,10 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
             >
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h3
-                  className="font-semibold"
+                  className="text-lg font-semibold tracking-tight"
                   style={{ color: "var(--color-text)" }}
                 >
-                  Recent tickets
+                  My activities
                 </h3>
 
                 <button
@@ -1148,15 +1280,15 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                   No tickets yet. Your support requests will appear here.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--color-border)" }}>
                   {tickets.slice(0, 4).map((ticket) => (
                     <button
                       key={ticket.id}
                       type="button"
                       onClick={() => openTicketDetails(ticket)}
-                      className="min-w-0 rounded-xl border p-4 text-left transition hover:opacity-80"
+                      className="group flex w-full min-w-0 items-center justify-between gap-4 border-b px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-4"
                       style={{
-                        backgroundColor: "var(--color-bg)",
+                        backgroundColor: "transparent",
                         borderColor: "var(--color-border)",
                       }}
                     >
@@ -1200,7 +1332,19 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
       style={{
         backgroundColor: "var(--color-bg)",
         color: "var(--color-text)",
-      }}
+        // Dark Quick Desk-inspired palette, scoped to the helpdesk shell.
+        "--color-bg": "#0b0c0f",
+        "--color-surface": "#202124",
+        "--color-surface-secondary": "#2c2d30",
+        "--color-border": "#36373b",
+        "--color-text": "#f3f4f6",
+        "--color-text-secondary": "#a1a1aa",
+        "--color-accent": "#4169f5",
+        "--color-accent-soft": "#1c2d65",
+        "--color-accent-text": "#a9bcff",
+        "--color-danger-text": "#fca5a5",
+      } as React.CSSProperties
+      }
     >
       <Sidebar
         role={user.role}

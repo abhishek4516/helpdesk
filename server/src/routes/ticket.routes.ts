@@ -6,6 +6,7 @@ import {
   getDepartments,
   getTickets,
   assignTicket,
+  getTicketLifecycle,
 } from '../controllers/ticket.controller.js'
 import {
   requestTicketTransfer,
@@ -17,6 +18,7 @@ const router = Router()
 
 router.get('/departments', requireAuth, getDepartments)
 router.get('/', requireAuth, getTickets)
+router.get('/:id/lifecycle', requireAuth, getTicketLifecycle)
 router.post('/', requireAuth, createTicket)
 
 router.patch('/:id/assign', requireAuth, assignTicket)

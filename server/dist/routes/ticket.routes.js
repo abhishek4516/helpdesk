@@ -7,6 +7,7 @@ const ticketTransfer_controller_js_1 = require("../controllers/ticketTransfer.co
 const router = (0, express_1.Router)();
 router.get('/departments', auth_middleware_js_1.requireAuth, ticket_controller_js_1.getDepartments);
 router.get('/', auth_middleware_js_1.requireAuth, ticket_controller_js_1.getTickets);
+router.get('/:id/lifecycle', auth_middleware_js_1.requireAuth, ticket_controller_js_1.getTicketLifecycle);
 router.post('/', auth_middleware_js_1.requireAuth, ticket_controller_js_1.createTicket);
 router.patch('/:id/assign', auth_middleware_js_1.requireAuth, ticket_controller_js_1.assignTicket);
 // Transfer workflow

@@ -220,3 +220,195 @@ export async function assignTicket(
     res.status(500).json({ success: false, message: 'Unable to assign the ticket. Please try again.' })
   }
 }
+
+export async function getTicketLifecycle(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user
+
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: 'Please log in to view the ticket lifecycle.',
+      })
+      return
+    }
+
+    const ticketId = Number(req.params.id)
+
+    if (!Number.isSafeInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        success: false,
+        message: 'A valid ticket ID is required.',
+      })
+      return
+    }
+
+    // Fetch the ticket and its creator.
+    const [tickets] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+         t.id,
+         t.ticket_code AS ticketCode,
+         t.title,
+         t.description,
+         t.status,
+         t.created_at AS createdAt,
+         t.updated_at AS updatedAt,
+         t.requester_user_id AS requesterUserId,
+         creator.full_name AS requesterName,
+         creator.role AS requesterRole,
+         t.department_id AS departmentId,
+         d.name AS departmentName,
+         t.assigned_employee_id AS assignedEmployeeId,
+         assignee.full_name AS assignedEmployeeName
+       FROM tickets t
+       INNER JOIN users creator ON creator.id = t.requester_user_id
+       INNER JOIN departments d ON d.id = t.department_id
+       LEFT JOIN users assignee ON assignee.id = t.assigned_employee_id
+       WHERE t.id = ?
+       LIMIT 1`,
+      [ticketId],
+    )
+
+    if (tickets.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Ticket not found.',
+      })
+      return
+    }
+
+    const ticket = tickets[0]
+
+    // Apply the same basic visibility rules as getTickets.
+    if (user.role === 'department_head') {
+      const [visible] = await pool.execute<RowDataPacket[]>(
+        `SELECT id
+         FROM departments
+         WHERE id = ? AND head_user_id = ?
+         LIMIT 1`,
+        [ticket.departmentId, user.id],
+      )
+
+      if (visible.length === 0) {
+        res.status(403).json({
+          success: false,
+          message: 'You cannot view this ticket lifecycle.',
+        })
+        return
+      }
+    } else if (
+      user.role !== 'master' &&
+      ticket.requesterUserId !== user.id &&
+      ticket.assignedEmployeeId !== user.id
+    ) {
+      res.status(403).json({
+        success: false,
+        message: 'You cannot view this ticket lifecycle.',
+      })
+      return
+    }
+
+    // Fetch all transfer requests and their review details.
+    const [transfers] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+         tr.id,
+         tr.requested_by_user_id AS requestedByUserId,
+         requester.full_name AS requestedByName,
+         tr.from_department_id AS fromDepartmentId,
+         source.name AS fromDepartmentName,
+         tr.to_department_id AS toDepartmentId,
+         destination.name AS toDepartmentName,
+         tr.reason,
+         tr.status,
+         tr.reviewed_by_user_id AS reviewedByUserId,
+         reviewer.full_name AS reviewedByName,
+         tr.review_comment AS reviewComment,
+         tr.created_at AS createdAt,
+         tr.reviewed_at AS reviewedAt
+       FROM ticket_transfer_requests tr
+       INNER JOIN users requester ON requester.id = tr.requested_by_user_id
+       INNER JOIN departments source ON source.id = tr.from_department_id
+       INNER JOIN departments destination ON destination.id = tr.to_department_id
+       LEFT JOIN users reviewer ON reviewer.id = tr.reviewed_by_user_id
+       WHERE tr.ticket_id = ?
+       ORDER BY tr.created_at ASC, tr.id ASC`,
+      [ticketId],
+    )
+
+    const events: Array<Record<string, unknown>> = [
+      {
+        type: 'created',
+        title: 'Ticket created',
+        description: ticket.title,
+        userId: ticket.requesterUserId,
+        userName: ticket.requesterName,
+        userRole: ticket.requesterRole,
+        timestamp: ticket.createdAt,
+      },
+    ]
+
+    if (ticket.assignedEmployeeId !== null) {
+      events.push({
+        type: 'assigned',
+        title: 'Ticket assigned',
+        userId: ticket.assignedEmployeeId,
+        userName: ticket.assignedEmployeeName,
+        timestamp: ticket.updatedAt,
+      })
+    }
+
+    for (const transfer of transfers) {
+      events.push({
+        type: 'transfer_requested',
+        title: 'Transfer requested',
+        userId: transfer.requestedByUserId,
+        userName: transfer.requestedByName,
+        fromDepartmentId: transfer.fromDepartmentId,
+        fromDepartmentName: transfer.fromDepartmentName,
+        toDepartmentId: transfer.toDepartmentId,
+        toDepartmentName: transfer.toDepartmentName,
+        reason: transfer.reason,
+        status: transfer.status,
+        timestamp: transfer.createdAt,
+      })
+
+      if (transfer.reviewedAt) {
+        events.push({
+          type: 'transfer_reviewed',
+          title:
+            transfer.status === 'approved'
+              ? 'Transfer approved'
+              : 'Transfer rejected',
+          userId: transfer.reviewedByUserId,
+          userName: transfer.reviewedByName,
+          status: transfer.status,
+          reviewComment: transfer.reviewComment,
+          fromDepartmentName: transfer.fromDepartmentName,
+          toDepartmentName: transfer.toDepartmentName,
+          timestamp: transfer.reviewedAt,
+        })
+      }
+    }
+
+    events.sort(
+      (a, b) =>
+        new Date(a.timestamp as string | Date).getTime() -
+        new Date(b.timestamp as string | Date).getTime(),
+    )
+
+    res.status(200).json({
+      success: true,
+      ticket,
+      events,
+    })
+  } catch (error) {
+    console.error('Get ticket lifecycle error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Unable to load the ticket lifecycle.',
+    })
+  }
+}

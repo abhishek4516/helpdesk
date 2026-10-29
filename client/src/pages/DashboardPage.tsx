@@ -1222,100 +1222,77 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
               </div>
             </section>
 
-            <section
-              className="rounded-xl border p-4 sm:p-5"
-              style={{
-                backgroundColor: "var(--color-surface)",
-                borderColor: "var(--color-border)",
-              }}
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h3
-                  className="text-lg font-semibold tracking-tight"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  My activities
-                </h3>
-
+            <section className="min-w-0" aria-labelledby="my-activities-heading">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b pb-4" style={{ borderColor: "var(--color-border)" }}>
+                <div>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--color-accent)" }}>
+                    YOUR WORKSPACE
+                  </p>
+                  <h3 id="my-activities-heading" className="text-lg font-semibold tracking-tight" style={{ color: "var(--color-text)" }}>
+                    My activities
+                  </h3>
+                  <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    A quick look at your latest support tickets.
+                  </p>
+                </div>
                 <button
                   type="button"
                   onClick={openTickets}
-                  className="text-sm font-medium"
+                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/[0.05]"
                   style={{ color: "var(--color-accent)" }}
                 >
-                  View all
+                  View all <span aria-hidden="true">↗</span>
                 </button>
               </div>
 
               {loadingTickets ? (
-                <p
-                  className="py-4 text-sm"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  Loading recent tickets...
-                </p>
+                <p className="py-6 text-sm" style={{ color: "var(--color-text-secondary)" }}>Loading recent tickets...</p>
               ) : ticketError ? (
-                <div className="py-3">
-                  <p
-                    role="alert"
-                    className="text-sm"
-                    style={{ color: "var(--color-danger-text)" }}
-                  >
-                    {ticketError}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void loadTickets()}
-                    className="mt-3 text-sm font-semibold"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    Try again
-                  </button>
+                <div className="py-4">
+                  <p role="alert" className="text-sm" style={{ color: "var(--color-danger-text)" }}>{ticketError}</p>
+                  <button type="button" onClick={() => void loadTickets()} className="mt-3 text-sm font-semibold" style={{ color: "var(--color-accent)" }}>Try again</button>
                 </div>
               ) : tickets.length === 0 ? (
-                <p
-                  className="py-4 text-sm"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  No tickets yet. Your support requests will appear here.
-                </p>
+                <div className="flex items-center gap-3 py-8">
+                  <span className="flex size-10 items-center justify-center rounded-full border text-lg" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }} aria-hidden="true">＋</span>
+                  <div>
+                    <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Nothing here yet</p>
+                    <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>Your recent support tickets will show up here.</p>
+                  </div>
+                </div>
               ) : (
-                <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--color-border)" }}>
-                  {tickets.slice(0, 4).map((ticket) => (
+                <div>
+                  {tickets.slice(0, 4).map((ticket, index) => (
                     <button
                       key={ticket.id}
                       type="button"
                       onClick={() => openTicketDetails(ticket)}
-                      className="group flex w-full min-w-0 items-center justify-between gap-4 border-b px-3 py-3 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] sm:px-4"
-                      style={{
-                        backgroundColor: "transparent",
-                        borderColor: "var(--color-border)",
-                      }}
+                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
+                      style={{ borderColor: "var(--color-border)" }}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p
-                            className="text-xs font-semibold"
-                            style={{ color: "var(--color-accent)" }}
-                          >
-                            {ticket.ticketCode}
-                          </p>
-                          <p
-                            className="mt-1 truncate text-sm font-semibold"
-                            style={{ color: "var(--color-text)" }}
-                          >
-                            {ticket.title}
-                          </p>
-                          <p
-                            className="mt-1 text-xs"
-                            style={{ color: "var(--color-text-secondary)" }}
-                          >
-                            {ticket.departmentName} ·{" "}
-                            {formatDate(ticket.createdAt)}
-                          </p>
-                        </div>
+                      <span
+                        className="flex size-9 items-center justify-center rounded-full text-xs font-bold ring-1 ring-inset transition-colors sm:size-10"
+                        style={{
+                          backgroundColor: "var(--color-accent-soft)",
+                          color: "var(--color-accent)",
+                          boxShadow: index === 0 ? "0 0 0 3px rgba(59,130,246,0.06)" : "none",
+                        }}
+                        aria-hidden="true"
+                      >
+                        {String(ticket.title || "T").trim().charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--color-accent)" }}>{ticket.ticketCode}</span>
+                          <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>· {formatDate(ticket.createdAt)}</span>
+                        </span>
+                        <span className="mt-1 block truncate text-sm font-semibold transition-colors group-hover:text-white" style={{ color: "var(--color-text)" }}>{ticket.title}</span>
+                        <span className="mt-1 block truncate text-xs" style={{ color: "var(--color-text-secondary)" }}>{ticket.departmentName || "Unassigned department"}</span>
+                      </span>
+                      <span className="flex items-center gap-2 pl-1">
                         <StatusBadge status={ticket.status} />
-                      </div>
+                        <span className="hidden text-base opacity-0 transition-opacity group-hover:opacity-70 sm:inline" style={{ color: "var(--color-text-secondary)" }} aria-hidden="true">→</span>
+                      </span>
                     </button>
                   ))}
                 </div>

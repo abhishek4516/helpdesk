@@ -239,7 +239,7 @@ export default function Sidebar({
           // IMPORTANT: do not add "relative" here.
           // Mobile uses fixed positioning so the sidebar never pushes
           // dashboard content down.
-          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-[100dvh] shrink-0 flex-col overflow-visible border-r',
+          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh shrink-0 flex-col overflow-visible border-r',
           'w-[min(18rem,85vw)]',
           'transition-[transform,width] duration-200 ease-in-out',
           // Desktop becomes a normal sticky sidebar.
@@ -247,7 +247,7 @@ export default function Sidebar({
           // Mobile drawer visibility.
           mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
           // Desktop collapsed / expanded widths.
-          collapsed ? 'md:w-[76px]' : 'md:w-60',
+          collapsed ? 'md:w-19' : 'md:w-60',
         ].join(' ')}
         style={{
           backgroundColor: 'var(--color-surface)',
@@ -259,7 +259,7 @@ export default function Sidebar({
         {/* Brand header */}
         <div
           className={[
-            'flex min-h-[76px] shrink-0 items-center border-b px-4',
+            'flex min-h-19 shrink-0 items-center border-b px-4',
             'justify-between gap-3',
             collapsed ? 'md:justify-center md:px-2' : '',
           ].join(' ')}
@@ -378,7 +378,7 @@ export default function Sidebar({
               >
                 {isActive && (
                   <span
-                    className="absolute bottom-2 left-0 top-2 w-[3px] rounded-r-full"
+                    className="absolute bottom-2 left-0 top-2 w-0.75 rounded-r-full"
                     style={{ backgroundColor: 'var(--color-accent)' }}
                   />
                 )}

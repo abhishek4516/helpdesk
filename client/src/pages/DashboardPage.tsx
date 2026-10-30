@@ -574,7 +574,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                     Description
                   </h3>
                   <p
-                    className="mt-2 whitespace-pre-wrap break-words text-sm leading-7"
+                    className="mt-2 whitespace-pre-wrap wrap-break-word text-sm leading-7"
                     style={{ color: "var(--color-text-secondary)" }}
                   >
                     {selectedTicket.description || "No description provided."}
@@ -615,7 +615,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         {item.label}
                       </p>
                       <p
-                        className="mt-1 break-words text-sm font-medium capitalize"
+                        className="mt-1 wrap-break-word text-sm font-medium capitalize"
                         style={{ color: "var(--color-text)" }}
                       >
                         {item.value}
@@ -768,7 +768,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                                 </p>
                               )}
                               {description != null && String(description).trim() !== "" && (
-                                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
+                                <p className="mt-2 whitespace-pre-wrap wrap-break-word text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
                                   {String(description)}
                                 </p>
                               )}
@@ -853,7 +853,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         }}
                         disabled={loadingEmployees || savingAssignment}
                         aria-label="Choose employee to assign ticket"
-                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-60"
+                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-(--color-accent) disabled:opacity-60"
                         style={{
                           backgroundColor: "var(--color-bg)",
                           borderColor: "var(--color-border)",
@@ -1005,7 +1005,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         onChange={(event) => setSearchQuery(event.target.value)}
                         placeholder="Search tickets, IDs, departments..."
                         aria-label="Search tickets"
-                        className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
+                        className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-(--color-accent) focus:ring-2 focus:ring-(--color-accent)/20"
                         style={{
                           backgroundColor: "var(--color-bg)",
                           borderColor: "var(--color-border)",
@@ -1018,7 +1018,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                       value={statusFilter}
                       onChange={(event) => setStatusFilter(event.target.value)}
                       aria-label="Filter tickets by status"
-                      className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
+                      className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-(--color-accent)"
                       style={{
                         backgroundColor: "transparent",
                         borderColor: "var(--color-border)",
@@ -1238,7 +1238,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                 <button
                   type="button"
                   onClick={openTickets}
-                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/[0.05]"
+                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/5"
                   style={{ color: "var(--color-accent)" }}
                 >
                   View all <span aria-hidden="true">↗</span>
@@ -1267,7 +1267,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                       key={ticket.id}
                       type="button"
                       onClick={() => openTicketDetails(ticket)}
-                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
+                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/2.5 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
                       style={{ borderColor: "var(--color-border)" }}
                     >
                       <span
@@ -1309,19 +1309,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
       style={{
         backgroundColor: "var(--color-bg)",
         color: "var(--color-text)",
-        // Dark Quick Desk-inspired palette, scoped to the helpdesk shell.
-        "--color-bg": "#0b0c0f",
-        "--color-surface": "#202124",
-        "--color-surface-secondary": "#2c2d30",
-        "--color-border": "#36373b",
-        "--color-text": "#f3f4f6",
-        "--color-text-secondary": "#a1a1aa",
-        "--color-accent": "#4169f5",
-        "--color-accent-soft": "#1c2d65",
-        "--color-accent-text": "#a9bcff",
-        "--color-danger-text": "#fca5a5",
-      } as React.CSSProperties
-      }
+      }}
     >
       <Sidebar
         role={user.role}

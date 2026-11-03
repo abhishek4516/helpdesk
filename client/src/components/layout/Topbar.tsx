@@ -4,12 +4,13 @@ import type { LoggedInUser } from '../../types/auth'
 
 interface TopbarProps {
   user: LoggedInUser
+  departmentName?: string
   title: string
 }
 
 type Theme = 'light' | 'dark'
 
-export default function Topbar({ user, title }: TopbarProps) {
+export default function Topbar({ user,  title }: TopbarProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       return localStorage.getItem('helpdesk-theme') === 'dark'
@@ -47,7 +48,7 @@ export default function Topbar({ user, title }: TopbarProps) {
 
     if (!search.trim()) return
 
-    // Search can be connected to ticket filtering later.
+
     console.log('Helpdesk search:', search.trim())
   }
 
@@ -65,7 +66,7 @@ export default function Topbar({ user, title }: TopbarProps) {
       }}
     >
       {/* Main top bar */}
-      <div className="flex min-h-[76px] items-center gap-3 px-3 py-3 sm:gap-4 sm:px-6 lg:px-8">
+      <div className="flex min-h-19 items-center gap-3 px-3 py-3 sm:gap-4 sm:px-6 lg:px-8">
         {/* Mobile menu button */}
         <button
           type="button"
@@ -157,7 +158,7 @@ export default function Topbar({ user, title }: TopbarProps) {
             <svg
               viewBox="0 0 24 24"
               fill="none"
-              className="size-[18px] shrink-0"
+              className="size-4.5 shrink-0"
               style={{ color: 'var(--color-text-secondary)' }}
               aria-hidden="true"
             >

@@ -81,8 +81,8 @@ export async function createTicket(
     const ticketCode = `HD-${randomBytes(6).toString('hex').toUpperCase()}`
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO tickets
-        (ticket_code, title, description, requester_user_id, department_id, status)
-       VALUES (?, ?, ?, ?, ?, 'open')`,
+  (ticket_code, title, description, requester_user_id, department_id, status)
+ VALUES (?, ?, ?, ?, ?, 'pending_approval')`,
       [ticketCode, title, description, user.id, departmentId],
     )
 
@@ -94,7 +94,7 @@ export async function createTicket(
         ticketCode,
         title,
         description,
-        status: 'open',
+        status: 'pending approval',
         departmentId,
         departmentName: departments[0].name,
         requesterUserId: user.id,
@@ -136,17 +136,19 @@ export async function getTickets(
       INNER JOIN users u ON u.id = t.requester_user_id
     `
 
-    const params: (string | number)[] = []
-    if (user.role === 'master') {
-      // Master users can view all tickets.
-    } else if (user.role === 'department_head') {
-      sql += ' WHERE d.head_user_id = ?'
-      params.push(user.id)
-    } else {
-      sql += ' WHERE t.requester_user_id = ?'
-      params.push(user.id)
-    }
+const params: (string | number)[] = []
 
+if (user.role === 'master') {
+  // Master users can view all tickets.
+} else if (user.role === 'department_head') {
+  // Department heads can view all tickets in their department.
+  sql += ' WHERE d.head_user_id = ?'
+  params.push(user.id)
+} else {
+  // Employees can view tickets they created or tickets assigned to them.
+  sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)'
+  params.push(user.id, user.id)
+}
     sql += ' ORDER BY t.created_at DESC'
     const [tickets] = await pool.execute<TicketRow[]>(sql, params)
     res.status(200).json({ success: true, tickets })
@@ -155,69 +157,253 @@ export async function getTickets(
     res.status(500).json({ success: false, message: 'Unable to load tickets.' })
   }
 }
+export async function reviewTicket(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  try {
+    const user = req.user
 
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: 'Please log in to review tickets.',
+      })
+      return
+    }
+
+    if (user.role !== 'department_head') {
+      res.status(403).json({
+        success: false,
+        message: 'Only department heads can review tickets.',
+      })
+      return
+    }
+
+    const ticketId = Number(req.params.id)
+    const { action, reason } = req.body as {
+      action?: string
+      reason?: string
+    }
+
+    if (!Number.isSafeInteger(ticketId) || ticketId <= 0) {
+      res.status(400).json({
+        success: false,
+        message: 'A valid ticket ID is required.',
+      })
+      return
+    }
+
+    if (action !== 'approve' && action !== 'reject') {
+      res.status(400).json({
+        success: false,
+        message: 'Action must be approve or reject.',
+      })
+      return
+    }
+
+    if (
+      action === 'reject' &&
+      (typeof reason !== 'string' || !reason.trim())
+    ) {
+      res.status(400).json({
+        success: false,
+        message: 'Please provide a reason for rejection.',
+      })
+      return
+    }
+
+    const [tickets] = await pool.execute<RowDataPacket[]>(
+      `SELECT t.id, t.status
+       FROM tickets t
+       INNER JOIN departments d ON d.id = t.department_id
+       WHERE t.id = ?
+         AND d.head_user_id = ?
+       LIMIT 1`,
+      [ticketId, user.id],
+    )
+
+    if (tickets.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Ticket not found in your department.',
+      })
+      return
+    }
+
+    if (tickets[0].status !== 'pending_approval') {
+      res.status(409).json({
+        success: false,
+        message: 'This ticket is no longer awaiting approval.',
+      })
+      return
+    }
+
+    if (action === 'approve') {
+      await pool.execute(
+        `UPDATE tickets
+         SET status = 'approved',
+             approved_by_user_id = ?,
+             approved_at = CURRENT_TIMESTAMP,
+             rejection_reason = NULL
+         WHERE id = ? AND status = 'pending_approval'`,
+        [user.id, ticketId],
+      )
+    } else {
+      await pool.execute(
+        `UPDATE tickets
+         SET status = 'rejected',
+             approved_by_user_id = ?,
+             approved_at = CURRENT_TIMESTAMP,
+             rejection_reason = ?
+         WHERE id = ? AND status = 'pending_approval'`,
+        [user.id, reason!.trim(), ticketId],
+      )
+    }
+
+    res.status(200).json({
+      success: true,
+      message:
+        action === 'approve'
+          ? 'Ticket approved successfully.'
+          : 'Ticket rejected successfully.',
+    })
+  } catch (error) {
+    console.error('Review ticket error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Unable to review the ticket. Please try again.',
+    })
+  }
+}
 export async function assignTicket(
   req: Request,
   res: Response,
 ): Promise<void> {
   try {
     const user = req.user
+
     if (!user) {
-      res.status(401).json({ success: false, message: 'Please log in to assign tickets.' })
+      res.status(401).json({
+        success: false,
+        message: 'Please log in to assign tickets.',
+      })
       return
     }
 
-    if (user.role !== 'master') {
-      res.status(403).json({ success: false, message: 'Only the master user can assign tickets.' })
+    if (user.role !== 'master' && user.role !== 'department_head') {
+      res.status(403).json({
+        success: false,
+        message: 'Only master users or department heads can assign tickets.',
+      })
       return
     }
 
     const ticketId = Number(req.params.id)
     const employeeId = Number(req.body.employeeId)
+
     if (
       !Number.isSafeInteger(ticketId) || ticketId <= 0 ||
       !Number.isSafeInteger(employeeId) || employeeId <= 0
     ) {
-      res.status(400).json({ success: false, message: 'A valid ticket ID and employee ID are required.' })
-      return
-    }
-
-    const [tickets] = await pool.execute<RowDataPacket[]>(
-      'SELECT id FROM tickets WHERE id = ? LIMIT 1',
-      [ticketId],
-    )
-    if (tickets.length === 0) {
-      res.status(404).json({ success: false, message: 'Ticket not found.' })
-      return
-    }
-
-    // Cross-department assignment is allowed. Only active employees and department heads may be assigned.
-    const [employees] = await pool.execute<RowDataPacket[]>(
-      `SELECT id FROM users
-       WHERE id = ? AND is_active = 1
-         AND role IN ('employee', 'department_head')
-       LIMIT 1`,
-      [employeeId],
-    )
-    if (employees.length === 0) {
       res.status(400).json({
         success: false,
-        message: 'Select an active employee or department head.',
+        message: 'A valid ticket ID and employee ID are required.',
       })
       return
     }
 
-    await pool.execute(
+    const [tickets] = await pool.execute<RowDataPacket[]>(
+      `SELECT t.id, t.department_id AS departmentId, t.status
+       FROM tickets t
+       INNER JOIN departments d ON d.id = t.department_id
+       WHERE t.id = ?
+         AND (? = 'master' OR d.head_user_id = ?)
+       LIMIT 1`,
+      [ticketId, user.role, user.id],
+    )
+
+    if (tickets.length === 0) {
+      res.status(404).json({
+        success: false,
+        message: 'Ticket not found in your accessible departments.',
+      })
+      return
+    }
+
+    const ticket = tickets[0]
+
+    if (ticket.status !== 'approved') {
+      res.status(409).json({
+        success: false,
+        message: 'Only approved tickets can be assigned.',
+      })
+      return
+    }
+
+    const employeeSql =
+      user.role === 'department_head'
+        ? `SELECT id FROM users
+           WHERE id = ?
+             AND department_id = ?
+             AND is_active = 1
+             AND role = 'employee'
+           LIMIT 1`
+        : `SELECT id FROM users
+           WHERE id = ?
+             AND is_active = 1
+             AND role IN ('employee', 'department_head')
+           LIMIT 1`
+
+    const employeeParams =
+      user.role === 'department_head'
+        ? [employeeId, ticket.departmentId]
+        : [employeeId]
+
+    const [employees] = await pool.execute<RowDataPacket[]>(
+      employeeSql,
+      employeeParams,
+    )
+
+    if (employees.length === 0) {
+      res.status(400).json({
+        success: false,
+        message:
+          user.role === 'department_head'
+            ? 'Select an active employee from your department.'
+            : 'Select an active employee or department head.',
+      })
+      return
+    }
+
+    const [result] = await pool.execute<ResultSetHeader>(
       `UPDATE tickets
-       SET assigned_employee_id = ?, status = CASE WHEN status = 'open' THEN 'assigned' ELSE status END
-       WHERE id = ?`,
+       SET assigned_employee_id = ?,
+           status = 'assigned'
+       WHERE id = ?
+         AND status = 'approved'
+         AND assigned_employee_id IS NULL`,
       [employeeId, ticketId],
     )
 
-    res.status(200).json({ success: true, message: 'Ticket assigned successfully.' })
+    if (result.affectedRows === 0) {
+      res.status(409).json({
+        success: false,
+        message: 'This ticket has already been assigned or its status changed.',
+      })
+      return
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Ticket assigned successfully.',
+    })
   } catch (error) {
     console.error('Assign ticket error:', error)
-    res.status(500).json({ success: false, message: 'Unable to assign the ticket. Please try again.' })
+    res.status(500).json({
+      success: false,
+      message: 'Unable to assign the ticket. Please try again.',
+    })
   }
 }
 

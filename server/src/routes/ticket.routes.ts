@@ -6,6 +6,7 @@ import {
   getDepartments,
   getTickets,
   assignTicket,
+  reviewTicket,
   getTicketLifecycle,
 } from '../controllers/ticket.controller.js'
 import {
@@ -21,6 +22,7 @@ router.get('/', requireAuth, getTickets)
 router.get('/:id/lifecycle', requireAuth, getTicketLifecycle)
 router.post('/', requireAuth, createTicket)
 
+router.patch('/:id/review', requireAuth, reviewTicket)
 router.patch('/:id/assign', requireAuth, assignTicket)
 
 // Transfer workflow

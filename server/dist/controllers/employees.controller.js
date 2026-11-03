@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listEmployees = listEmployees;
+exports.listAssignableEmployees = listAssignableEmployees;
 exports.createEmployee = createEmployee;
 exports.updateEmployee = updateEmployee;
 exports.deactivateEmployee = deactivateEmployee;
@@ -44,7 +45,7 @@ function publicEmployee(employee) {
     };
 }
 async function departmentExists(departmentId) {
-    const departments = await (0, db_js_1.query)(`SELECT id, is_active
+    const departments = await (0, db_js_1.query)(`SELECT id, is_active, head_user_id
      FROM departments
      WHERE id = ? AND is_active = TRUE
      LIMIT 1`, [departmentId]);
@@ -52,6 +53,23 @@ async function departmentExists(departmentId) {
 }
 async function invalidateSessions(userId) {
     await (0, db_js_1.execute)('DELETE FROM user_sessions WHERE user_id = ?', [userId]);
+}
+async function lockDepartment(connection, departmentId) {
+    const [rows] = await connection.execute(`SELECT id, is_active, head_user_id
+     FROM departments
+     WHERE id = ?
+     LIMIT 1
+     FOR UPDATE`, [departmentId]);
+    return rows[0] ?? null;
+}
+function isDuplicateEntry(error) {
+    return error?.code === 'ER_DUP_ENTRY';
+}
+function errorResponse(res, message, status = 400) {
+    return res.status(status).json({
+        success: false,
+        message,
+    });
 }
 async function listEmployees(_req, res) {
     try {
@@ -72,72 +90,115 @@ async function listEmployees(_req, res) {
         });
     }
 }
+async function listAssignableEmployees(req, res) {
+    try {
+        const user = req.user;
+        if (!user) {
+            return errorResponse(res, 'Please log in to view assignable employees.', 401);
+        }
+        let employees;
+        if (user.role === 'master') {
+            employees = await (0, db_js_1.query)(`SELECT id, employee_id, full_name, email, role,
+                department_id, is_active, must_change_password
+         FROM users
+         WHERE is_active = TRUE
+           AND role IN ('employee', 'department_head')
+         ORDER BY full_name ASC`);
+        }
+        else if (user.role === 'department_head') {
+            employees = await (0, db_js_1.query)(`SELECT u.id, u.employee_id, u.full_name, u.email,
+                u.role, u.department_id, u.is_active,
+                u.must_change_password
+         FROM users u
+         INNER JOIN departments d
+           ON d.id = u.department_id
+         WHERE d.head_user_id = ?
+           AND u.role = 'employee'
+           AND u.is_active = TRUE
+           AND d.is_active = TRUE
+         ORDER BY u.full_name ASC`, [user.id]);
+        }
+        else {
+            return errorResponse(res, 'You are not allowed to assign tickets.', 403);
+        }
+        return res.status(200).json({
+            success: true,
+            employees: employees.map(publicEmployee),
+        });
+    }
+    catch (error) {
+        console.error('List assignable employees error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Unable to load assignable employees.',
+        });
+    }
+}
 async function createEmployee(req, res) {
     const employeeId = typeof req.body.employeeId === 'string'
         ? req.body.employeeId.trim()
         : '';
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const name = typeof req.body.name === 'string'
+        ? req.body.name.trim()
+        : '';
     const email = typeof req.body.email === 'string' && req.body.email.trim()
         ? req.body.email.trim().toLowerCase()
         : null;
     const role = parseRole(req.body.role);
     const departmentId = parseDepartmentId(req.body.departmentId);
     if (!/^\d{1,20}$/.test(employeeId)) {
-        return res.status(400).json({
-            success: false,
-            message: 'Employee ID must contain 1 to 20 digits.',
-        });
+        return errorResponse(res, 'Employee ID must contain 1 to 20 digits.');
     }
     if (!name || name.length > 150) {
-        return res.status(400).json({
-            success: false,
-            message: 'Name is required and must not exceed 150 characters.',
-        });
+        return errorResponse(res, 'Name is required and must not exceed 150 characters.');
     }
     if (email !== null &&
-        (email.length > 255 ||
-            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please provide a valid email address.',
-        });
+        (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+        return errorResponse(res, 'Please provide a valid email address.');
     }
     if (!role) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please select a valid role.',
-        });
+        return errorResponse(res, 'Please select a valid role.');
     }
     if (departmentId === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please select a valid department.',
-        });
+        return errorResponse(res, 'Please select a valid department.');
     }
     if (role !== 'master' && departmentId === null) {
-        return res.status(400).json({
-            success: false,
-            message: 'A department is required for this role.',
-        });
+        return errorResponse(res, 'A department is required for this role.');
     }
-    if (departmentId !== null && !(await departmentExists(departmentId))) {
-        return res.status(400).json({
-            success: false,
-            message: 'The selected department does not exist or is inactive.',
-        });
+    if (role === 'master' && departmentId !== null) {
+        return errorResponse(res, 'Master users cannot belong to a department.');
     }
     try {
         const temporaryPassword = generateTemporaryPassword();
         const passwordHash = await (0, password_js_1.hashPassword)(temporaryPassword);
-        const result = await (0, db_js_1.execute)(`INSERT INTO users
-        (employee_id, full_name, email, password_hash, role,
-         department_id, is_active, must_change_password)
-       VALUES (?, ?, ?, ?, ?, ?, TRUE, TRUE)`, [employeeId, name, email, passwordHash, role, departmentId]);
+        const employeeDatabaseId = await (0, db_js_1.withTransaction)(async (connection) => {
+            if (departmentId !== null) {
+                const department = await lockDepartment(connection, departmentId);
+                if (!department || !department.is_active) {
+                    throw new Error('The selected department does not exist or is inactive.');
+                }
+                if (role === 'department_head' &&
+                    department.head_user_id !== null) {
+                    throw new Error('This department already has a head. Remove or replace the existing head first.');
+                }
+            }
+            const [result] = await connection.execute(`INSERT INTO users
+          (employee_id, full_name, email, password_hash, role,
+           department_id, is_active, must_change_password)
+         VALUES (?, ?, ?, ?, ?, ?, TRUE, TRUE)`, [employeeId, name, email, passwordHash, role, departmentId]);
+            const newUserId = result.insertId;
+            if (role === 'department_head' && departmentId !== null) {
+                await connection.execute(`UPDATE departments
+           SET head_user_id = ?
+           WHERE id = ? AND head_user_id IS NULL`, [newUserId, departmentId]);
+            }
+            return newUserId;
+        });
         return res.status(201).json({
             success: true,
             message: 'Employee created successfully.',
             employee: {
-                id: result.insertId,
+                id: employeeDatabaseId,
                 employeeId,
                 name,
                 email,
@@ -150,12 +211,14 @@ async function createEmployee(req, res) {
         });
     }
     catch (error) {
-        const dbError = error;
-        if (dbError.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({
-                success: false,
-                message: 'That Employee ID or email address is already in use.',
-            });
+        if (isDuplicateEntry(error)) {
+            return errorResponse(res, 'That Employee ID or email address is already in use.', 409);
+        }
+        if (error instanceof Error) {
+            if (error.message.includes('department') ||
+                error.message.includes('already has a head')) {
+                return errorResponse(res, error.message, 409);
+            }
         }
         console.error('Create employee error:', error);
         return res.status(500).json({
@@ -167,92 +230,106 @@ async function createEmployee(req, res) {
 async function updateEmployee(req, res) {
     const employeeDatabaseId = parsePositiveId(req.params.id);
     if (!employeeDatabaseId) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid employee record ID.',
-        });
+        return errorResponse(res, 'Invalid employee record ID.');
     }
     const employeeId = typeof req.body.employeeId === 'string'
         ? req.body.employeeId.trim()
         : '';
-    const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
+    const name = typeof req.body.name === 'string'
+        ? req.body.name.trim()
+        : '';
     const email = typeof req.body.email === 'string' && req.body.email.trim()
         ? req.body.email.trim().toLowerCase()
         : null;
     const role = parseRole(req.body.role);
     const departmentId = parseDepartmentId(req.body.departmentId);
     if (!/^\d{1,20}$/.test(employeeId)) {
-        return res.status(400).json({
-            success: false,
-            message: 'Employee ID must contain 1 to 20 digits.',
-        });
+        return errorResponse(res, 'Employee ID must contain 1 to 20 digits.');
     }
     if (!name || name.length > 150) {
-        return res.status(400).json({
-            success: false,
-            message: 'Name is required and must not exceed 150 characters.',
-        });
+        return errorResponse(res, 'Name is required and must not exceed 150 characters.');
     }
     if (email !== null &&
-        (email.length > 255 ||
-            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please provide a valid email address.',
-        });
+        (email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+        return errorResponse(res, 'Please provide a valid email address.');
     }
     if (!role) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please select a valid role.',
-        });
+        return errorResponse(res, 'Please select a valid role.');
     }
     if (departmentId === undefined) {
-        return res.status(400).json({
-            success: false,
-            message: 'Please select a valid department.',
-        });
+        return errorResponse(res, 'Please select a valid department.');
     }
     if (role !== 'master' && departmentId === null) {
-        return res.status(400).json({
-            success: false,
-            message: 'A department is required for this role.',
-        });
+        return errorResponse(res, 'A department is required for this role.');
+    }
+    if (role === 'master' && departmentId !== null) {
+        return errorResponse(res, 'Master users cannot belong to a department.');
+    }
+    if (employeeDatabaseId === req.user?.id) {
+        return errorResponse(res, 'You cannot edit your own account here.');
     }
     try {
-        if (departmentId !== null && !(await departmentExists(departmentId))) {
-            return res.status(400).json({
-                success: false,
-                message: 'The selected department does not exist or is inactive.',
-            });
-        }
-        const existing = await (0, db_js_1.query)(`SELECT id, employee_id, full_name, email, role,
-              department_id, is_active, must_change_password
-       FROM users
-       WHERE id = ?
-       LIMIT 1`, [employeeDatabaseId]);
-        if (!existing[0]) {
-            return res.status(404).json({
-                success: false,
-                message: 'Employee not found.',
-            });
-        }
-        if (existing[0].id === req.user?.id) {
-            return res.status(400).json({
-                success: false,
-                message: 'You cannot edit your own account here.',
-            });
-        }
-        await (0, db_js_1.execute)(`UPDATE users
-       SET employee_id = ?, full_name = ?, email = ?,
-           role = ?, department_id = ?
-       WHERE id = ?`, [employeeId, name, email, role, departmentId, employeeDatabaseId]);
+        await (0, db_js_1.withTransaction)(async (connection) => {
+            const [existingRows] = await connection.execute(`SELECT id, employee_id, full_name, email, role,
+                department_id, is_active, must_change_password
+         FROM users
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE`, [employeeDatabaseId]);
+            const existing = existingRows[0];
+            if (!existing) {
+                throw new Error('EMPLOYEE_NOT_FOUND');
+            }
+            if (!existing.is_active) {
+                throw new Error('This employee account is inactive.');
+            }
+            if (departmentId !== null) {
+                const department = await lockDepartment(connection, departmentId);
+                if (!department || !department.is_active) {
+                    throw new Error('The selected department does not exist or is inactive.');
+                }
+                if (role === 'department_head' &&
+                    department.head_user_id !== null &&
+                    department.head_user_id !== employeeDatabaseId) {
+                    throw new Error('This department already has a head. Remove or replace the existing head first.');
+                }
+            }
+            // Clear the old head assignment when moving or demoting a head.
+            if (existing.role === 'department_head' &&
+                existing.department_id !== null &&
+                (role !== 'department_head' ||
+                    departmentId !== existing.department_id)) {
+                await connection.execute(`UPDATE departments
+           SET head_user_id = NULL
+           WHERE id = ? AND head_user_id = ?`, [existing.department_id, employeeDatabaseId]);
+            }
+            await connection.execute(`UPDATE users
+         SET employee_id = ?,
+             full_name = ?,
+             email = ?,
+             role = ?,
+             department_id = ?
+         WHERE id = ?`, [employeeId, name, email, role, departmentId, employeeDatabaseId]);
+            // Assign the employee as head of the new department.
+            if (role === 'department_head' && departmentId !== null) {
+                const [result] = await connection.execute(`UPDATE departments
+           SET head_user_id = ?
+           WHERE id = ?
+             AND (head_user_id IS NULL OR head_user_id = ?)`, [employeeDatabaseId, departmentId, employeeDatabaseId]);
+                if (result.affectedRows === 0) {
+                    throw new Error('This department already has a head. Remove or replace the existing head first.');
+                }
+            }
+        });
         await invalidateSessions(employeeDatabaseId);
         const updated = await (0, db_js_1.query)(`SELECT id, employee_id, full_name, email, role,
               department_id, is_active, must_change_password
        FROM users
        WHERE id = ?
        LIMIT 1`, [employeeDatabaseId]);
+        if (!updated[0]) {
+            return errorResponse(res, 'Employee not found.', 404);
+        }
         return res.json({
             success: true,
             message: 'Employee details updated. They must log in again.',
@@ -260,12 +337,20 @@ async function updateEmployee(req, res) {
         });
     }
     catch (error) {
-        const dbError = error;
-        if (dbError.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({
-                success: false,
-                message: 'That Employee ID or email address is already in use.',
-            });
+        if (isDuplicateEntry(error)) {
+            return errorResponse(res, 'That Employee ID or email address is already in use.', 409);
+        }
+        if (error instanceof Error) {
+            if (error.message === 'EMPLOYEE_NOT_FOUND') {
+                return errorResponse(res, 'Employee not found.', 404);
+            }
+            if (error.message.includes('department') ||
+                error.message.includes('head')) {
+                return errorResponse(res, error.message, 409);
+            }
+            if (error.message.includes('inactive')) {
+                return errorResponse(res, error.message, 409);
+            }
         }
         console.error('Update employee error:', error);
         return res.status(500).json({
@@ -277,24 +362,36 @@ async function updateEmployee(req, res) {
 async function deactivateEmployee(req, res) {
     const employeeDatabaseId = parsePositiveId(req.params.id);
     if (!employeeDatabaseId) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid employee record ID.',
-        });
+        return errorResponse(res, 'Invalid employee record ID.');
     }
     if (employeeDatabaseId === req.user?.id) {
-        return res.status(400).json({
-            success: false,
-            message: 'You cannot deactivate your own account.',
-        });
+        return errorResponse(res, 'You cannot deactivate your own account.');
     }
     try {
-        const result = await (0, db_js_1.execute)('UPDATE users SET is_active = FALSE WHERE id = ? AND is_active = TRUE', [employeeDatabaseId]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Active employee not found.',
-            });
+        const deactivated = await (0, db_js_1.withTransaction)(async (connection) => {
+            const [employees] = await connection.execute(`SELECT id, employee_id, full_name, email, role,
+                department_id, is_active, must_change_password
+         FROM users
+         WHERE id = ?
+         LIMIT 1
+         FOR UPDATE`, [employeeDatabaseId]);
+            const employee = employees[0];
+            if (!employee || !employee.is_active) {
+                return false;
+            }
+            if (employee.role === 'department_head' &&
+                employee.department_id !== null) {
+                await connection.execute(`UPDATE departments
+           SET head_user_id = NULL
+           WHERE id = ? AND head_user_id = ?`, [employee.department_id, employeeDatabaseId]);
+            }
+            await connection.execute(`UPDATE users
+         SET is_active = FALSE
+         WHERE id = ?`, [employeeDatabaseId]);
+            return true;
+        });
+        if (!deactivated) {
+            return errorResponse(res, 'Active employee not found.', 404);
         }
         await invalidateSessions(employeeDatabaseId);
         return res.json({
@@ -313,16 +410,10 @@ async function deactivateEmployee(req, res) {
 async function resetEmployeePassword(req, res) {
     const employeeDatabaseId = parsePositiveId(req.params.id);
     if (!employeeDatabaseId) {
-        return res.status(400).json({
-            success: false,
-            message: 'Invalid employee record ID.',
-        });
+        return errorResponse(res, 'Invalid employee record ID.');
     }
     if (employeeDatabaseId === req.user?.id) {
-        return res.status(400).json({
-            success: false,
-            message: 'Use the regular password-change process for your own account.',
-        });
+        return errorResponse(res, 'Use the regular password-change process for your own account.');
     }
     try {
         const employees = await (0, db_js_1.query)(`SELECT id, employee_id, full_name, email, role,
@@ -331,10 +422,7 @@ async function resetEmployeePassword(req, res) {
        WHERE id = ? AND is_active = TRUE
        LIMIT 1`, [employeeDatabaseId]);
         if (!employees[0]) {
-            return res.status(404).json({
-                success: false,
-                message: 'Active employee not found.',
-            });
+            return errorResponse(res, 'Active employee not found.', 404);
         }
         const temporaryPassword = generateTemporaryPassword();
         const passwordHash = await (0, password_js_1.hashPassword)(temporaryPassword);

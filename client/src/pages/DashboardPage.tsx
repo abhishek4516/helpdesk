@@ -214,15 +214,18 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   }, []);
 
   const loadAssignableEmployees = useCallback(async () => {
-    if (user.role !== "master") return;
+    if (user.role !== "master" && user.role !== "department_head") return;
 
     setLoadingEmployees(true);
     setAssignmentError("");
 
     try {
-      const response = await fetch("http://localhost:5000/api/employees", {
-        credentials: "include",
-      });
+      const response = await fetch(
+        "http://localhost:5000/api/employees/assignable",
+        {
+          credentials: "include",
+        },
+      );
       const data = await response.json();
 
       if (!response.ok || !data.success) {
@@ -273,7 +276,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTickets();
-    if (user.role === "master") {
+    if (user.role === "master" || user.role === "department_head") {
       void loadAssignableEmployees();
     }
   }, [loadTickets, loadAssignableEmployees, user.role]);
@@ -574,7 +577,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                     Description
                   </h3>
                   <p
-                    className="mt-2 whitespace-pre-wrap wrap-break-word text-sm leading-7"
+                    className="mt-2 whitespace-pre-wrap break-words text-sm leading-7"
                     style={{ color: "var(--color-text-secondary)" }}
                   >
                     {selectedTicket.description || "No description provided."}
@@ -615,7 +618,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         {item.label}
                       </p>
                       <p
-                        className="mt-1 wrap-break-word text-sm font-medium capitalize"
+                        className="mt-1 break-words text-sm font-medium capitalize"
                         style={{ color: "var(--color-text)" }}
                       >
                         {item.value}
@@ -768,7 +771,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                                 </p>
                               )}
                               {description != null && String(description).trim() !== "" && (
-                                <p className="mt-2 whitespace-pre-wrap wrap-break-word text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
+                                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
                                   {String(description)}
                                 </p>
                               )}
@@ -780,7 +783,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                   )}
                 </section>
 
-                {user.role === "master" && (
+                {(user.role === "master" || user.role === "department_head") &&
+                  selectedTicket.status === "open" &&
+                  !(selectedTicket as TicketWithAssignment).assignedEmployeeId && (
                   <section
                     className="space-y-4 border-t pt-5"
                     style={{ borderColor: "var(--color-border)" }}
@@ -796,8 +801,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         className="mt-1 text-sm"
                         style={{ color: "var(--color-text-secondary)" }}
                       >
-                        Assign this ticket to any active employee, regardless of
-                        department.
+                        {user.role === "master"
+                          ? "Assign this ticket to an active employee."
+                          : "Assign this ticket to an active employee in your department."}
                       </p>
                     </div>
 
@@ -853,7 +859,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         }}
                         disabled={loadingEmployees || savingAssignment}
                         aria-label="Choose employee to assign ticket"
-                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-(--color-accent) disabled:opacity-60"
+                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-60"
                         style={{
                           backgroundColor: "var(--color-bg)",
                           borderColor: "var(--color-border)",
@@ -1005,7 +1011,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                         onChange={(event) => setSearchQuery(event.target.value)}
                         placeholder="Search tickets, IDs, departments..."
                         aria-label="Search tickets"
-                        className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-(--color-accent) focus:ring-2 focus:ring-(--color-accent)/20"
+                        className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
                         style={{
                           backgroundColor: "var(--color-bg)",
                           borderColor: "var(--color-border)",
@@ -1018,7 +1024,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                       value={statusFilter}
                       onChange={(event) => setStatusFilter(event.target.value)}
                       aria-label="Filter tickets by status"
-                      className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-(--color-accent)"
+                      className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
                       style={{
                         backgroundColor: "transparent",
                         borderColor: "var(--color-border)",
@@ -1238,7 +1244,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                 <button
                   type="button"
                   onClick={openTickets}
-                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/5"
+                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/[0.05]"
                   style={{ color: "var(--color-accent)" }}
                 >
                   View all <span aria-hidden="true">↗</span>
@@ -1267,7 +1273,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                       key={ticket.id}
                       type="button"
                       onClick={() => openTicketDetails(ticket)}
-                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/2.5 sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
+                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
                       style={{ borderColor: "var(--color-border)" }}
                     >
                       <span

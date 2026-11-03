@@ -19,6 +19,7 @@ interface TransferRequest {
   fromDepartmentName: string
   toDepartmentId: number
   toDepartmentName: string
+  destinationHeadUserId: number | null
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   reviewedByUserId: number | null
@@ -215,7 +216,9 @@ export default function TicketTransfersPage({
   }
 
   const visibleRequests = requests.filter((request) =>
-    canReview ? true : request.requestedByUserId === user.id,
+    user.role === 'master' ||
+    (user.role === 'department_head' && request.destinationHeadUserId === user.id) ||
+    request.requestedByUserId === user.id,
   )
 
   return (
@@ -259,7 +262,7 @@ export default function TicketTransfersPage({
         </div>
       )}
 
-      <section
+      {user.role === 'employee' && <section
         className="rounded-xl border p-5 sm:p-6"
         style={{
           backgroundColor: 'var(--color-surface)',
@@ -344,7 +347,7 @@ export default function TicketTransfersPage({
             {submitting ? 'Submitting...' : 'Submit transfer request'}
           </button>
         </form>
-      </section>
+      </section>}
 
       <section
         className="rounded-xl border p-5 sm:p-6"
@@ -431,7 +434,7 @@ export default function TicketTransfersPage({
                   </p>
                 )}
 
-                {canReview && request.status === 'pending' && (
+                {(user.role === 'master' || (user.role === 'department_head' && request.destinationHeadUserId === user.id)) && request.status === 'pending' && (
                   <div className="mt-4 space-y-3">
                     <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
                       Review comment (optional)

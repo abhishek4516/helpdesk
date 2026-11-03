@@ -1,24 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const db_js_1 = require("../utils/db.js");
+const auth_middleware_js_1 = require("../middleware/auth.middleware.js");
+const requireMaster_js_1 = require("../middleware/requireMaster.js");
+const departments_controller_js_1 = require("../controllers/departments.controller.js");
 const router = (0, express_1.Router)();
-router.get('/', async (_req, res) => {
-    try {
-        const departments = await (0, db_js_1.query)(`SELECT id, name, department_code, is_active, head_user_id
-       FROM departments
-       ORDER BY name ASC`);
-        res.json({
-            success: true,
-            departments,
-        });
-    }
-    catch (error) {
-        console.error('Failed to fetch departments:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch departments',
-        });
-    }
-});
+// All department routes require authentication.
+router.use(auth_middleware_js_1.requireAuth);
+// Department listing is available to authenticated users.
+router.get('/', departments_controller_js_1.listDepartments);
+// Department management is Master Admin only.
+router.use(requireMaster_js_1.requireMaster);
+router.post('/', departments_controller_js_1.createDepartment);
+router.put('/:id', departments_controller_js_1.updateDepartment);
+router.patch('/:id/head', departments_controller_js_1.assignDepartmentHead);
+router.delete('/:id/head', departments_controller_js_1.removeDepartmentHead);
+router.patch('/:id/status', departments_controller_js_1.setDepartmentActiveStatus);
 exports.default = router;

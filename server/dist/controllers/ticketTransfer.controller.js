@@ -43,13 +43,16 @@ async function requestTicketTransfer(req, res) {
             return;
         }
         const ticket = tickets[0];
-        // Only the currently assigned employee or the master may request a transfer.
-        if (user.role !== 'master' &&
-            ticket.assignedEmployeeId !== user.id) {
+        // A transfer can be requested only by the currently assigned employee.
+        if (user.role !== 'employee' || ticket.assignedEmployeeId !== user.id) {
             res.status(403).json({
                 success: false,
                 message: 'Only the assigned employee can request this transfer.',
             });
+            return;
+        }
+        if (ticket.status === 'transfer_pending') {
+            res.status(409).json({ success: false, message: 'A transfer is already pending for this ticket.' });
             return;
         }
         if (ticket.departmentId === toDepartmentId) {
@@ -81,14 +84,39 @@ async function requestTicketTransfer(req, res) {
             });
             return;
         }
-        const [result] = await database_js_1.pool.execute(`INSERT INTO ticket_transfer_requests
-        (ticket_id, requested_by_user_id, from_department_id,
-         to_department_id, reason)
-       VALUES (?, ?, ?, ?, ?)`, [ticketId, user.id, ticket.departmentId, toDepartmentId, reason]);
+        const connection = await database_js_1.pool.getConnection();
+        let requestId = 0;
+        try {
+            await connection.beginTransaction();
+            const [locked] = await connection.execute(`SELECT id, department_id AS departmentId, assigned_employee_id AS assignedEmployeeId, status
+         FROM tickets WHERE id = ? FOR UPDATE`, [ticketId]);
+            if (!locked.length || locked[0].assignedEmployeeId !== user.id || locked[0].status === 'transfer_pending') {
+                await connection.rollback();
+                res.status(409).json({ success: false, message: 'The ticket changed or already has a pending transfer.' });
+                return;
+            }
+            const [insertResult] = await connection.execute(`INSERT INTO ticket_transfer_requests
+          (ticket_id, requested_by_user_id, from_department_id, to_department_id,
+           reason, previous_ticket_status, previous_assigned_employee_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`, [ticketId, user.id, ticket.departmentId, toDepartmentId, reason, locked[0].status, user.id]);
+            requestId = insertResult.insertId;
+            await connection.execute(`UPDATE tickets SET status = 'transfer_pending' WHERE id = ?`, [ticketId]);
+            await connection.execute(`INSERT INTO ticket_activities
+         (ticket_id, actor_user_id, event_type, title, description, from_department_id, to_department_id)
+         VALUES (?, ?, 'transfer_requested', 'Department transfer requested', ?, ?, ?)`, [ticketId, user.id, reason, ticket.departmentId, toDepartmentId]);
+            await connection.commit();
+        }
+        catch (error) {
+            await connection.rollback();
+            throw error;
+        }
+        finally {
+            connection.release();
+        }
         res.status(201).json({
             success: true,
             message: 'Transfer request submitted for approval.',
-            requestId: result.insertId,
+            requestId,
         });
     }
     catch (error) {
@@ -122,6 +150,7 @@ async function getTicketTransferRequests(req, res) {
         fd.name AS fromDepartmentName,
         tr.to_department_id AS toDepartmentId,
         td.name AS toDepartmentName,
+        td.head_user_id AS destinationHeadUserId,
         tr.reason,
         tr.status,
         tr.reviewed_by_user_id AS reviewedByUserId,
@@ -143,12 +172,11 @@ async function getTicketTransferRequests(req, res) {
         else if (user.role === 'department_head') {
             sql += `
         WHERE (
-          fd.head_user_id = ?
-          OR td.head_user_id = ?
+          td.head_user_id = ?
           OR tr.requested_by_user_id = ?
         )
       `;
-            params.push(user.id, user.id, user.id);
+            params.push(user.id, user.id);
         }
         else {
             sql += ` WHERE tr.requested_by_user_id = ?`;
@@ -210,7 +238,9 @@ async function reviewTicketTransfer(req, res) {
          from_department_id AS fromDepartmentId,
          to_department_id AS toDepartmentId,
          reason,
-         status
+         status,
+         previous_ticket_status AS previousTicketStatus,
+         previous_assigned_employee_id AS previousAssignedEmployeeId
        FROM ticket_transfer_requests
        WHERE id = ?
        FOR UPDATE`, [requestId]);
@@ -231,46 +261,47 @@ async function reviewTicketTransfer(req, res) {
             });
             return;
         }
-        // Department heads may review only requests involving their own department.
+        // A department head may review only as the destination department head.
         if (user.role === 'department_head') {
             const [departments] = await connection.execute(`SELECT id, head_user_id AS headUserId
          FROM departments
          WHERE id IN (?, ?)`, [transfer.fromDepartmentId, transfer.toDepartmentId]);
-            const isAuthorizedHead = departments.some((department) => department.headUserId === user.id);
+            const destination = departments.find((department) => department.id === transfer.toDepartmentId);
+            const isAuthorizedHead = destination?.headUserId === user.id;
             if (!isAuthorizedHead) {
                 await connection.rollback();
                 res.status(403).json({
                     success: false,
-                    message: 'You can review only transfers involving your department.',
+                    message: 'Only the destination department head can review this transfer.',
                 });
                 return;
             }
         }
+        const [tickets] = await connection.execute(`SELECT id, department_id AS departmentId,
+              assigned_employee_id AS assignedEmployeeId, status
+       FROM tickets WHERE id = ? FOR UPDATE`, [transfer.ticketId]);
+        if (!tickets.length || tickets[0].departmentId !== transfer.fromDepartmentId || tickets[0].status !== 'transfer_pending') {
+            await connection.rollback();
+            res.status(409).json({ success: false, message: 'The ticket state has changed. This transfer cannot be reviewed.' });
+            return;
+        }
+        await connection.execute(`INSERT INTO ticket_transfer_reviews
+       (transfer_request_id, reviewer_user_id, reviewer_type, decision, review_comment)
+       VALUES (?, ?, ?, ?, ?)`, [requestId, user.id, user.role === 'master' ? 'master' : 'destination_head', decision, reviewComment]);
         if (decision === 'approved') {
-            const [tickets] = await connection.execute(`SELECT id, department_id AS departmentId,
-                assigned_employee_id AS assignedEmployeeId
-         FROM tickets
-         WHERE id = ?
-         FOR UPDATE`, [transfer.ticketId]);
-            if (tickets.length === 0 ||
-                tickets[0].departmentId !== transfer.fromDepartmentId) {
-                await connection.rollback();
-                res.status(409).json({
-                    success: false,
-                    message: 'The ticket department has changed. Please review the request again.',
-                });
-                return;
-            }
-            await connection.execute(`UPDATE tickets
-         SET department_id = ?
+            await connection.execute(`UPDATE tickets SET department_id = ?, assigned_employee_id = NULL, status = 'open'
          WHERE id = ?`, [transfer.toDepartmentId, transfer.ticketId]);
         }
+        else {
+            await connection.execute(`UPDATE tickets SET status = ?, assigned_employee_id = ? WHERE id = ?`, [transfer.previousTicketStatus ?? 'assigned',
+                transfer.previousAssignedEmployeeId ?? tickets[0].assignedEmployeeId, transfer.ticketId]);
+        }
         await connection.execute(`UPDATE ticket_transfer_requests
-       SET status = ?,
-           reviewed_by_user_id = ?,
-           review_comment = ?,
-           reviewed_at = CURRENT_TIMESTAMP
-       WHERE id = ?`, [decision, user.id, reviewComment, requestId]);
+       SET status = ?, reviewed_by_user_id = ?, review_comment = ?, reviewed_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'pending'`, [decision, user.id, reviewComment, requestId]);
+        await connection.execute(`INSERT INTO ticket_activities
+       (ticket_id, actor_user_id, event_type, title, description, from_department_id, to_department_id, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, JSON_OBJECT('decision', ?))`, [transfer.ticketId, user.id, `transfer_${decision}`, decision === 'approved' ? 'Department transfer approved' : 'Department transfer rejected', reviewComment, transfer.fromDepartmentId, transfer.toDepartmentId, decision]);
         await connection.commit();
         res.status(200).json({
             success: true,

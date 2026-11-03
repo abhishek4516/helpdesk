@@ -19,6 +19,7 @@ export default function CreateTicketForm({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [departmentId, setDepartmentId] = useState('')
+  const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Medium')
   const [loadingDepartments, setLoadingDepartments] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -50,6 +51,7 @@ export default function CreateTicketForm({
         title: title.trim(),
         description: description.trim(),
         departmentId: Number(departmentId),
+        priority,
       })
 
       onSuccess()
@@ -134,6 +136,23 @@ export default function CreateTicketForm({
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="min-w-0">
+          <label htmlFor="ticket-priority" className={labelClass}>
+            Priority
+          </label>
+          <select
+            id="ticket-priority"
+            value={priority}
+            onChange={(event) => setPriority(event.target.value as typeof priority)}
+            className={fieldClass}
+          >
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
         </div>
 
         {/* Description */}

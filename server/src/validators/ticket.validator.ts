@@ -18,6 +18,8 @@ export const createTicketSchema = z.object({
     .number()
     .int('Department ID must be a whole number')
     .positive('Please select a valid department'),
+
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
 })
 
 export type CreateTicketInput = z.infer<typeof createTicketSchema>

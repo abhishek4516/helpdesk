@@ -13,6 +13,7 @@ export interface Ticket {
   title: string
   description: string
   status: string
+  priority?: 'Low' | 'Medium' | 'High' | 'Critical'
   departmentId: number
   departmentName: string
   requesterUserId: number
@@ -76,6 +77,7 @@ export async function createTicket(input: {
   title: string
   description: string
   departmentId: number
+  priority: 'Low' | 'Medium' | 'High' | 'Critical'
 }): Promise<Ticket> {
   const response = await fetch(`${API_BASE_URL}/tickets`, {
     method: 'POST',

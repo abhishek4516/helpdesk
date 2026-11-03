@@ -1,37 +1,35 @@
 
 import { Router } from 'express'
-import { query } from '../utils/db.js'
-import type { RowDataPacket } from 'mysql2'
+
+import { requireAuth } from '../middleware/auth.middleware.js'
+import { requireMaster } from '../middleware/requireMaster.js'
+
+import {
+  listDepartments,
+  createDepartment,
+  updateDepartment,
+  assignDepartmentHead,
+  removeDepartmentHead,
+  setDepartmentActiveStatus,
+} from '../controllers/departments.controller.js'
 
 const router = Router()
 
-interface DepartmentRow extends RowDataPacket {
-  id: number
-  name: string
-  department_code: string
-  is_active: number | boolean
-  head_user_id: number | null
-}
+// All department routes require authentication.
+router.use(requireAuth)
 
-router.get('/', async (_req, res) => {
-  try {
-    const departments = await query<DepartmentRow>(
-      `SELECT id, name, department_code, is_active, head_user_id
-       FROM departments
-       ORDER BY name ASC`,
-    )
+// Department listing is available to authenticated users.
+router.get('/', listDepartments)
 
-    res.json({
-      success: true,
-      departments,
-    })
-  } catch (error) {
-    console.error('Failed to fetch departments:', error)
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch departments',
-    })
-  }
-})
+// Department management is Master Admin only.
+router.use(requireMaster)
+
+router.post('/', createDepartment)
+router.put('/:id', updateDepartment)
+
+router.patch('/:id/head', assignDepartmentHead)
+router.delete('/:id/head', removeDepartmentHead)
+
+router.patch('/:id/status', setDepartmentActiveStatus)
 
 export default router

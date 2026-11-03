@@ -17,4 +17,5 @@ exports.createTicketSchema = zod_1.z.object({
         .number()
         .int('Department ID must be a whole number')
         .positive('Please select a valid department'),
+    priority: zod_1.z.enum(['Low', 'Medium', 'High', 'Critical']),
 });

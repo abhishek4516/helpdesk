@@ -5,7 +5,9 @@ const auth_middleware_js_1 = require("../middleware/auth.middleware.js");
 const requireMaster_js_1 = require("../middleware/requireMaster.js");
 const employees_controller_js_1 = require("../controllers/employees.controller.js");
 const router = (0, express_1.Router)();
-// Every employee-management endpoint requires an authenticated master user.
+// Authenticated users can access the restricted assignment list.
+router.get('/assignable', auth_middleware_js_1.requireAuth, employees_controller_js_1.listAssignableEmployees);
+// All employee-management endpoints remain master-only.
 router.use(auth_middleware_js_1.requireAuth, requireMaster_js_1.requireMaster);
 router.get('/', employees_controller_js_1.listEmployees);
 router.post('/', employees_controller_js_1.createEmployee);

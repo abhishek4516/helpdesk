@@ -36,7 +36,7 @@ async function createTicket(req, res) {
             });
             return;
         }
-        const { title, description, departmentId } = validation.data;
+        const { title, description, departmentId, priority } = validation.data;
         const user = req.user;
         if (!user) {
             res.status(401).json({ success: false, message: 'Please log in to create a ticket.' });
@@ -50,8 +50,11 @@ async function createTicket(req, res) {
         }
         const ticketCode = `HD-${(0, node_crypto_1.randomBytes)(6).toString('hex').toUpperCase()}`;
         const [result] = await database_js_1.pool.execute(`INSERT INTO tickets
-        (ticket_code, title, description, requester_user_id, department_id, status)
-       VALUES (?, ?, ?, ?, ?, 'open')`, [ticketCode, title, description, user.id, departmentId]);
+       (ticket_code, title, description, priority, requester_user_id, department_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'open')`, [ticketCode, title, description, priority, user.id, departmentId]);
+        await database_js_1.pool.execute(`INSERT INTO ticket_activities
+       (ticket_id, actor_user_id, event_type, title, description, to_department_id, metadata)
+       VALUES (?, ?, 'created', 'Ticket created', ?, ?, JSON_OBJECT('priority', ?))`, [result.insertId, user.id, title, departmentId, priority]);
         res.status(201).json({
             success: true,
             message: 'Ticket created successfully.',
@@ -61,6 +64,7 @@ async function createTicket(req, res) {
                 title,
                 description,
                 status: 'open',
+                priority,
                 departmentId,
                 departmentName: departments[0].name,
                 requesterUserId: user.id,
@@ -86,6 +90,7 @@ async function getTickets(req, res) {
         t.title,
         t.description,
         t.status,
+        t.priority,
         t.department_id AS departmentId,
         d.name AS departmentName,
         t.requester_user_id AS requesterUserId,
@@ -102,12 +107,14 @@ async function getTickets(req, res) {
             // Master users can view all tickets.
         }
         else if (user.role === 'department_head') {
+            // Department heads can view all tickets in their department.
             sql += ' WHERE d.head_user_id = ?';
             params.push(user.id);
         }
         else {
-            sql += ' WHERE t.requester_user_id = ?';
-            params.push(user.id);
+            // Employees can view tickets they created or tickets assigned to them.
+            sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)';
+            params.push(user.id, user.id);
         }
         sql += ' ORDER BY t.created_at DESC';
         const [tickets] = await database_js_1.pool.execute(sql, params);
@@ -122,45 +129,103 @@ async function assignTicket(req, res) {
     try {
         const user = req.user;
         if (!user) {
-            res.status(401).json({ success: false, message: 'Please log in to assign tickets.' });
+            res.status(401).json({
+                success: false,
+                message: 'Please log in to assign tickets.',
+            });
             return;
         }
-        if (user.role !== 'master') {
-            res.status(403).json({ success: false, message: 'Only the master user can assign tickets.' });
+        if (user.role !== 'master' && user.role !== 'department_head') {
+            res.status(403).json({
+                success: false,
+                message: 'Only master users or department heads can assign tickets.',
+            });
             return;
         }
         const ticketId = Number(req.params.id);
         const employeeId = Number(req.body.employeeId);
         if (!Number.isSafeInteger(ticketId) || ticketId <= 0 ||
             !Number.isSafeInteger(employeeId) || employeeId <= 0) {
-            res.status(400).json({ success: false, message: 'A valid ticket ID and employee ID are required.' });
-            return;
-        }
-        const [tickets] = await database_js_1.pool.execute('SELECT id FROM tickets WHERE id = ? LIMIT 1', [ticketId]);
-        if (tickets.length === 0) {
-            res.status(404).json({ success: false, message: 'Ticket not found.' });
-            return;
-        }
-        // Cross-department assignment is allowed. Only active employees and department heads may be assigned.
-        const [employees] = await database_js_1.pool.execute(`SELECT id FROM users
-       WHERE id = ? AND is_active = 1
-         AND role IN ('employee', 'department_head')
-       LIMIT 1`, [employeeId]);
-        if (employees.length === 0) {
             res.status(400).json({
                 success: false,
-                message: 'Select an active employee or department head.',
+                message: 'A valid ticket ID and employee ID are required.',
             });
             return;
         }
-        await database_js_1.pool.execute(`UPDATE tickets
-       SET assigned_employee_id = ?, status = CASE WHEN status = 'open' THEN 'assigned' ELSE status END
-       WHERE id = ?`, [employeeId, ticketId]);
-        res.status(200).json({ success: true, message: 'Ticket assigned successfully.' });
+        const [tickets] = await database_js_1.pool.execute(`SELECT t.id, t.department_id AS departmentId, t.status
+       FROM tickets t
+       INNER JOIN departments d ON d.id = t.department_id
+       WHERE t.id = ?
+         AND (? = 'master' OR d.head_user_id = ?)
+       LIMIT 1`, [ticketId, user.role, user.id]);
+        if (tickets.length === 0) {
+            res.status(404).json({
+                success: false,
+                message: 'Ticket not found in your accessible departments.',
+            });
+            return;
+        }
+        const ticket = tickets[0];
+        if (ticket.status !== 'open') {
+            res.status(409).json({
+                success: false,
+                message: 'Only open, unassigned tickets can be assigned.',
+            });
+            return;
+        }
+        const employeeSql = user.role === 'department_head'
+            ? `SELECT id FROM users
+           WHERE id = ?
+             AND department_id = ?
+             AND is_active = 1
+             AND role = 'employee'
+           LIMIT 1`
+            : `SELECT id FROM users
+           WHERE id = ?
+             AND is_active = 1
+             AND role IN ('employee', 'department_head')
+           LIMIT 1`;
+        const employeeParams = user.role === 'department_head'
+            ? [employeeId, ticket.departmentId]
+            : [employeeId];
+        const [employees] = await database_js_1.pool.execute(employeeSql, employeeParams);
+        if (employees.length === 0) {
+            res.status(400).json({
+                success: false,
+                message: user.role === 'department_head'
+                    ? 'Select an active employee from your department.'
+                    : 'Select an active employee or department head.',
+            });
+            return;
+        }
+        const [result] = await database_js_1.pool.execute(`UPDATE tickets
+       SET assigned_employee_id = ?,
+           status = 'assigned'
+       WHERE id = ?
+         AND status = 'open'
+         AND assigned_employee_id IS NULL`, [employeeId, ticketId]);
+        if (result.affectedRows === 0) {
+            res.status(409).json({
+                success: false,
+                message: 'This ticket has already been assigned or its status changed.',
+            });
+            return;
+        }
+        await database_js_1.pool.execute(`INSERT INTO ticket_activities
+       (ticket_id, actor_user_id, event_type, title, description,
+        from_employee_id, to_employee_id, to_department_id)
+       VALUES (?, ?, 'assigned', 'Ticket assigned', ?, NULL, ?, ?)`, [ticketId, user.id, `Assigned to user ID ${employeeId}`, employeeId, ticket.departmentId]);
+        res.status(200).json({
+            success: true,
+            message: 'Ticket assigned successfully.',
+        });
     }
     catch (error) {
         console.error('Assign ticket error:', error);
-        res.status(500).json({ success: false, message: 'Unable to assign the ticket. Please try again.' });
+        res.status(500).json({
+            success: false,
+            message: 'Unable to assign the ticket. Please try again.',
+        });
     }
 }
 async function getTicketLifecycle(req, res) {
@@ -188,6 +253,7 @@ async function getTicketLifecycle(req, res) {
          t.title,
          t.description,
          t.status,
+         t.priority,
          t.created_at AS createdAt,
          t.updated_at AS updatedAt,
          t.requester_user_id AS requesterUserId,
@@ -257,8 +323,53 @@ async function getTicketLifecycle(req, res) {
        LEFT JOIN users reviewer ON reviewer.id = tr.reviewed_by_user_id
        WHERE tr.ticket_id = ?
        ORDER BY tr.created_at ASC, tr.id ASC`, [ticketId]);
-        const events = [
-            {
+        const [activityRows] = await database_js_1.pool.execute(`SELECT
+         a.id,
+         a.event_type AS type,
+         a.title,
+         a.description,
+         a.actor_user_id AS userId,
+         actor.full_name AS userName,
+         actor.role AS userRole,
+         a.from_department_id AS fromDepartmentId,
+         fromDepartment.name AS fromDepartmentName,
+         a.to_department_id AS toDepartmentId,
+         toDepartment.name AS toDepartmentName,
+         a.from_employee_id AS fromEmployeeId,
+         fromEmployee.full_name AS fromEmployeeName,
+         a.to_employee_id AS toEmployeeId,
+         toEmployee.full_name AS toEmployeeName,
+         a.metadata,
+         a.created_at AS timestamp
+       FROM ticket_activities a
+       LEFT JOIN users actor ON actor.id = a.actor_user_id
+       LEFT JOIN departments fromDepartment ON fromDepartment.id = a.from_department_id
+       LEFT JOIN departments toDepartment ON toDepartment.id = a.to_department_id
+       LEFT JOIN users fromEmployee ON fromEmployee.id = a.from_employee_id
+       LEFT JOIN users toEmployee ON toEmployee.id = a.to_employee_id
+       WHERE a.ticket_id = ?
+       ORDER BY a.created_at ASC, a.id ASC`, [ticketId]);
+        const events = activityRows.map((row) => ({
+            type: row.type,
+            title: row.title,
+            description: row.description,
+            userId: row.userId,
+            userName: row.userName,
+            userRole: row.userRole,
+            fromDepartmentId: row.fromDepartmentId,
+            fromDepartmentName: row.fromDepartmentName,
+            toDepartmentId: row.toDepartmentId,
+            toDepartmentName: row.toDepartmentName,
+            fromEmployeeId: row.fromEmployeeId,
+            fromEmployeeName: row.fromEmployeeName,
+            toEmployeeId: row.toEmployeeId,
+            toEmployeeName: row.toEmployeeName,
+            metadata: row.metadata,
+            timestamp: row.timestamp,
+        }));
+        // Fallback for legacy tickets that predate the activity migration.
+        if (events.length === 0) {
+            events.push({
                 type: 'created',
                 title: 'Ticket created',
                 description: ticket.title,
@@ -266,15 +377,6 @@ async function getTicketLifecycle(req, res) {
                 userName: ticket.requesterName,
                 userRole: ticket.requesterRole,
                 timestamp: ticket.createdAt,
-            },
-        ];
-        if (ticket.assignedEmployeeId !== null) {
-            events.push({
-                type: 'assigned',
-                title: 'Ticket assigned',
-                userId: ticket.assignedEmployeeId,
-                userName: ticket.assignedEmployeeName,
-                timestamp: ticket.updatedAt,
             });
         }
         for (const transfer of transfers) {

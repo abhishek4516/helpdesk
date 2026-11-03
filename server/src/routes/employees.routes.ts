@@ -1,9 +1,9 @@
-
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.middleware.js'
 import { requireMaster } from '../middleware/requireMaster.js'
 import {
   listEmployees,
+  listAssignableEmployees,
   createEmployee,
   updateEmployee,
   deactivateEmployee,
@@ -12,7 +12,10 @@ import {
 
 const router = Router()
 
-// Every employee-management endpoint requires an authenticated master user.
+// Authenticated users can access the restricted assignment list.
+router.get('/assignable', requireAuth, listAssignableEmployees)
+
+// All employee-management endpoints remain master-only.
 router.use(requireAuth, requireMaster)
 
 router.get('/', listEmployees)

@@ -61,7 +61,7 @@ export async function createTicket(
       return
     }
 
-    const { title, description, departmentId } = validation.data
+    const { title, description, departmentId, priority } = validation.data
     const user = req.user
     if (!user) {
       res.status(401).json({ success: false, message: 'Please log in to create a ticket.' })
@@ -81,9 +81,16 @@ export async function createTicket(
     const ticketCode = `HD-${randomBytes(6).toString('hex').toUpperCase()}`
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO tickets
-  (ticket_code, title, description, requester_user_id, department_id, status)
- VALUES (?, ?, ?, ?, ?, 'pending_approval')`,
-      [ticketCode, title, description, user.id, departmentId],
+       (ticket_code, title, description, priority, requester_user_id, department_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'open')`,
+      [ticketCode, title, description, priority, user.id, departmentId],
+    )
+
+    await pool.execute(
+      `INSERT INTO ticket_activities
+       (ticket_id, actor_user_id, event_type, title, description, to_department_id, metadata)
+       VALUES (?, ?, 'created', 'Ticket created', ?, ?, JSON_OBJECT('priority', ?))`,
+      [result.insertId, user.id, title, departmentId, priority],
     )
 
     res.status(201).json({
@@ -94,7 +101,8 @@ export async function createTicket(
         ticketCode,
         title,
         description,
-        status: 'pending approval',
+        status: 'open',
+        priority,
         departmentId,
         departmentName: departments[0].name,
         requesterUserId: user.id,
@@ -124,6 +132,7 @@ export async function getTickets(
         t.title,
         t.description,
         t.status,
+        t.priority,
         t.department_id AS departmentId,
         d.name AS departmentName,
         t.requester_user_id AS requesterUserId,
@@ -136,144 +145,25 @@ export async function getTickets(
       INNER JOIN users u ON u.id = t.requester_user_id
     `
 
-const params: (string | number)[] = []
+    const params: (string | number)[] = []
 
-if (user.role === 'master') {
-  // Master users can view all tickets.
-} else if (user.role === 'department_head') {
-  // Department heads can view all tickets in their department.
-  sql += ' WHERE d.head_user_id = ?'
-  params.push(user.id)
-} else {
-  // Employees can view tickets they created or tickets assigned to them.
-  sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)'
-  params.push(user.id, user.id)
-}
+    if (user.role === 'master') {
+      // Master users can view all tickets.
+    } else if (user.role === 'department_head') {
+      // Department heads can view all tickets in their department.
+      sql += ' WHERE d.head_user_id = ?'
+      params.push(user.id)
+    } else {
+      // Employees can view tickets they created or tickets assigned to them.
+      sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)'
+      params.push(user.id, user.id)
+    }
     sql += ' ORDER BY t.created_at DESC'
     const [tickets] = await pool.execute<TicketRow[]>(sql, params)
     res.status(200).json({ success: true, tickets })
   } catch (error) {
     console.error('Get tickets error:', error)
     res.status(500).json({ success: false, message: 'Unable to load tickets.' })
-  }
-}
-export async function reviewTicket(
-  req: Request,
-  res: Response,
-): Promise<void> {
-  try {
-    const user = req.user
-
-    if (!user) {
-      res.status(401).json({
-        success: false,
-        message: 'Please log in to review tickets.',
-      })
-      return
-    }
-
-    if (user.role !== 'department_head') {
-      res.status(403).json({
-        success: false,
-        message: 'Only department heads can review tickets.',
-      })
-      return
-    }
-
-    const ticketId = Number(req.params.id)
-    const { action, reason } = req.body as {
-      action?: string
-      reason?: string
-    }
-
-    if (!Number.isSafeInteger(ticketId) || ticketId <= 0) {
-      res.status(400).json({
-        success: false,
-        message: 'A valid ticket ID is required.',
-      })
-      return
-    }
-
-    if (action !== 'approve' && action !== 'reject') {
-      res.status(400).json({
-        success: false,
-        message: 'Action must be approve or reject.',
-      })
-      return
-    }
-
-    if (
-      action === 'reject' &&
-      (typeof reason !== 'string' || !reason.trim())
-    ) {
-      res.status(400).json({
-        success: false,
-        message: 'Please provide a reason for rejection.',
-      })
-      return
-    }
-
-    const [tickets] = await pool.execute<RowDataPacket[]>(
-      `SELECT t.id, t.status
-       FROM tickets t
-       INNER JOIN departments d ON d.id = t.department_id
-       WHERE t.id = ?
-         AND d.head_user_id = ?
-       LIMIT 1`,
-      [ticketId, user.id],
-    )
-
-    if (tickets.length === 0) {
-      res.status(404).json({
-        success: false,
-        message: 'Ticket not found in your department.',
-      })
-      return
-    }
-
-    if (tickets[0].status !== 'pending_approval') {
-      res.status(409).json({
-        success: false,
-        message: 'This ticket is no longer awaiting approval.',
-      })
-      return
-    }
-
-    if (action === 'approve') {
-      await pool.execute(
-        `UPDATE tickets
-         SET status = 'approved',
-             approved_by_user_id = ?,
-             approved_at = CURRENT_TIMESTAMP,
-             rejection_reason = NULL
-         WHERE id = ? AND status = 'pending_approval'`,
-        [user.id, ticketId],
-      )
-    } else {
-      await pool.execute(
-        `UPDATE tickets
-         SET status = 'rejected',
-             approved_by_user_id = ?,
-             approved_at = CURRENT_TIMESTAMP,
-             rejection_reason = ?
-         WHERE id = ? AND status = 'pending_approval'`,
-        [user.id, reason!.trim(), ticketId],
-      )
-    }
-
-    res.status(200).json({
-      success: true,
-      message:
-        action === 'approve'
-          ? 'Ticket approved successfully.'
-          : 'Ticket rejected successfully.',
-    })
-  } catch (error) {
-    console.error('Review ticket error:', error)
-    res.status(500).json({
-      success: false,
-      message: 'Unable to review the ticket. Please try again.',
-    })
   }
 }
 export async function assignTicket(
@@ -333,10 +223,10 @@ export async function assignTicket(
 
     const ticket = tickets[0]
 
-    if (ticket.status !== 'approved') {
+    if (ticket.status !== 'open') {
       res.status(409).json({
         success: false,
-        message: 'Only approved tickets can be assigned.',
+        message: 'Only open, unassigned tickets can be assigned.',
       })
       return
     }
@@ -381,7 +271,7 @@ export async function assignTicket(
        SET assigned_employee_id = ?,
            status = 'assigned'
        WHERE id = ?
-         AND status = 'approved'
+         AND status = 'open'
          AND assigned_employee_id IS NULL`,
       [employeeId, ticketId],
     )
@@ -393,6 +283,14 @@ export async function assignTicket(
       })
       return
     }
+
+    await pool.execute(
+      `INSERT INTO ticket_activities
+       (ticket_id, actor_user_id, event_type, title, description,
+        from_employee_id, to_employee_id, to_department_id)
+       VALUES (?, ?, 'assigned', 'Ticket assigned', ?, NULL, ?, ?)`,
+      [ticketId, user.id, `Assigned to user ID ${employeeId}`, employeeId, ticket.departmentId],
+    )
 
     res.status(200).json({
       success: true,
@@ -440,6 +338,7 @@ export async function getTicketLifecycle(
          t.title,
          t.description,
          t.status,
+         t.priority,
          t.created_at AS createdAt,
          t.updated_at AS updatedAt,
          t.requester_user_id AS requesterUserId,
@@ -524,8 +423,58 @@ export async function getTicketLifecycle(
       [ticketId],
     )
 
-    const events: Array<Record<string, unknown>> = [
-      {
+    const [activityRows] = await pool.execute<RowDataPacket[]>(
+      `SELECT
+         a.id,
+         a.event_type AS type,
+         a.title,
+         a.description,
+         a.actor_user_id AS userId,
+         actor.full_name AS userName,
+         actor.role AS userRole,
+         a.from_department_id AS fromDepartmentId,
+         fromDepartment.name AS fromDepartmentName,
+         a.to_department_id AS toDepartmentId,
+         toDepartment.name AS toDepartmentName,
+         a.from_employee_id AS fromEmployeeId,
+         fromEmployee.full_name AS fromEmployeeName,
+         a.to_employee_id AS toEmployeeId,
+         toEmployee.full_name AS toEmployeeName,
+         a.metadata,
+         a.created_at AS timestamp
+       FROM ticket_activities a
+       LEFT JOIN users actor ON actor.id = a.actor_user_id
+       LEFT JOIN departments fromDepartment ON fromDepartment.id = a.from_department_id
+       LEFT JOIN departments toDepartment ON toDepartment.id = a.to_department_id
+       LEFT JOIN users fromEmployee ON fromEmployee.id = a.from_employee_id
+       LEFT JOIN users toEmployee ON toEmployee.id = a.to_employee_id
+       WHERE a.ticket_id = ?
+       ORDER BY a.created_at ASC, a.id ASC`,
+      [ticketId],
+    )
+
+    const events: Array<Record<string, unknown>> = activityRows.map((row) => ({
+      type: row.type,
+      title: row.title,
+      description: row.description,
+      userId: row.userId,
+      userName: row.userName,
+      userRole: row.userRole,
+      fromDepartmentId: row.fromDepartmentId,
+      fromDepartmentName: row.fromDepartmentName,
+      toDepartmentId: row.toDepartmentId,
+      toDepartmentName: row.toDepartmentName,
+      fromEmployeeId: row.fromEmployeeId,
+      fromEmployeeName: row.fromEmployeeName,
+      toEmployeeId: row.toEmployeeId,
+      toEmployeeName: row.toEmployeeName,
+      metadata: row.metadata,
+      timestamp: row.timestamp,
+    }))
+
+    // Fallback for legacy tickets that predate the activity migration.
+    if (events.length === 0) {
+      events.push({
         type: 'created',
         title: 'Ticket created',
         description: ticket.title,
@@ -533,16 +482,6 @@ export async function getTicketLifecycle(
         userName: ticket.requesterName,
         userRole: ticket.requesterRole,
         timestamp: ticket.createdAt,
-      },
-    ]
-
-    if (ticket.assignedEmployeeId !== null) {
-      events.push({
-        type: 'assigned',
-        title: 'Ticket assigned',
-        userId: ticket.assignedEmployeeId,
-        userName: ticket.assignedEmployeeName,
-        timestamp: ticket.updatedAt,
       })
     }
 

@@ -18,6 +18,29 @@ async function canAccessTicket(ticketId: number, user: NonNullable<Request['user
   return allowed ? ticket : null
 }
 
+
+export async function getPendingTicketResolution(req: Request, res: Response): Promise<void> {
+  try {
+    const user = req.user
+    const ticketId = Number(req.params.id)
+    if (!user) { res.status(401).json({ success: false, message: 'Please log in.' }); return }
+    if (!Number.isSafeInteger(ticketId) || ticketId <= 0) { res.status(400).json({ success: false, message: 'Invalid ticket ID.' }); return }
+    const ticket = await canAccessTicket(ticketId, user)
+    if (!ticket) { res.status(404).json({ success: false, message: 'Ticket not found or access denied.' }); return }
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      `SELECT r.id, r.resolution_comment AS resolutionComment, r.status,
+              r.created_at AS createdAt, u.full_name AS submittedByName
+       FROM ticket_resolution_requests r
+       JOIN users u ON u.id = r.submitted_by_user_id
+       WHERE r.ticket_id = ? ORDER BY r.id DESC LIMIT 1`, [ticketId],
+    )
+    res.json({ success: true, resolution: rows[0] ?? null })
+  } catch (error) {
+    console.error('Get ticket resolution error:', error)
+    res.status(500).json({ success: false, message: 'Unable to load resolution.' })
+  }
+}
+
 export async function getTicketComments(req: Request, res: Response): Promise<void> {
   try {
     const user = req.user

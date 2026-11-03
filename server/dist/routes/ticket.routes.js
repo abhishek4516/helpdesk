@@ -13,6 +13,7 @@ router.post('/', auth_middleware_js_1.requireAuth, ticket_controller_js_1.create
 // router.patch('/:id/review', requireAuth, )
 router.patch('/:id/assign', auth_middleware_js_1.requireAuth, ticket_controller_js_1.assignTicket);
 router.get('/:id/comments', auth_middleware_js_1.requireAuth, ticketWorkflow_controller_js_1.getTicketComments);
+router.get('/:id/resolution', auth_middleware_js_1.requireAuth, ticketWorkflow_controller_js_1.getPendingTicketResolution);
 router.post('/:id/comments', auth_middleware_js_1.requireAuth, ticketWorkflow_controller_js_1.addTicketComment);
 router.post('/:id/resolution', auth_middleware_js_1.requireAuth, ticketWorkflow_controller_js_1.submitTicketResolution);
 router.patch('/:id/resolution/:resolutionId/review', auth_middleware_js_1.requireAuth, ticketWorkflow_controller_js_1.reviewTicketResolution);

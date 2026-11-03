@@ -10,6 +10,7 @@ import {
   getTicketLifecycle,
 } from '../controllers/ticket.controller.js'
 import {
+  getPendingTicketResolution,
   getTicketComments,
   addTicketComment,
   submitTicketResolution,
@@ -33,6 +34,7 @@ router.post('/', requireAuth, createTicket)
 // router.patch('/:id/review', requireAuth, )
 router.patch('/:id/assign', requireAuth, assignTicket)
 router.get('/:id/comments', requireAuth, getTicketComments)
+router.get('/:id/resolution', requireAuth, getPendingTicketResolution)
 router.post('/:id/comments', requireAuth, addTicketComment)
 router.post('/:id/resolution', requireAuth, submitTicketResolution)
 router.patch('/:id/resolution/:resolutionId/review', requireAuth, reviewTicketResolution)

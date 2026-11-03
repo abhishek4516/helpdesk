@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import CreateTicketForm from "../components/tickets/CreateTicketForm";
+import TicketWorkflowPanel from "../components/tickets/TicketWorkflowPanel";
 import { getTickets, type Ticket } from "../services/ticketService";
 import {
   getTicketLifecycle,
@@ -335,6 +336,16 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     setSuccessMessage("Ticket created successfully!");
     setActivePage("tickets");
     void loadTickets();
+  }
+
+  async function refreshSelectedTicket() {
+    const freshTickets = await getTickets();
+    setTickets(freshTickets);
+    if (selectedTicket) {
+      const updated = freshTickets.find((item) => item.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+      void loadTicketLifecycle(selectedTicket.id);
+    }
   }
 
   async function handleAssignTicket() {
@@ -782,6 +793,12 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
                     </ol>
                   )}
                 </section>
+
+                <TicketWorkflowPanel
+                  ticket={selectedTicket}
+                  user={user}
+                  onUpdated={() => void refreshSelectedTicket()}
+                />
 
                 {(user.role === "master" || user.role === "department_head") &&
                   selectedTicket.status === "open" &&

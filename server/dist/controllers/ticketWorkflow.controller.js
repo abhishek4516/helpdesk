@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.getPendingTicketResolution = getPendingTicketResolution;
 exports.getTicketComments = getTicketComments;
 exports.addTicketComment = addTicketComment;
 exports.submitTicketResolution = submitTicketResolution;
@@ -20,6 +21,35 @@ async function canAccessTicket(ticketId, user) {
         ticket.assignedEmployeeId === user.id ||
         (user.role === 'department_head' && ticket.headUserId === user.id);
     return allowed ? ticket : null;
+}
+async function getPendingTicketResolution(req, res) {
+    try {
+        const user = req.user;
+        const ticketId = Number(req.params.id);
+        if (!user) {
+            res.status(401).json({ success: false, message: 'Please log in.' });
+            return;
+        }
+        if (!Number.isSafeInteger(ticketId) || ticketId <= 0) {
+            res.status(400).json({ success: false, message: 'Invalid ticket ID.' });
+            return;
+        }
+        const ticket = await canAccessTicket(ticketId, user);
+        if (!ticket) {
+            res.status(404).json({ success: false, message: 'Ticket not found or access denied.' });
+            return;
+        }
+        const [rows] = await database_js_1.pool.execute(`SELECT r.id, r.resolution_comment AS resolutionComment, r.status,
+              r.created_at AS createdAt, u.full_name AS submittedByName
+       FROM ticket_resolution_requests r
+       JOIN users u ON u.id = r.submitted_by_user_id
+       WHERE r.ticket_id = ? ORDER BY r.id DESC LIMIT 1`, [ticketId]);
+        res.json({ success: true, resolution: rows[0] ?? null });
+    }
+    catch (error) {
+        console.error('Get ticket resolution error:', error);
+        res.status(500).json({ success: false, message: 'Unable to load resolution.' });
+    }
 }
 async function getTicketComments(req, res) {
     try {

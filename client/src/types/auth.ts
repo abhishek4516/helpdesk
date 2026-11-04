@@ -1,4 +1,3 @@
-
 export type UserRole = 'master' | 'department_head' | 'employee'
 
 export interface LoggedInUser {
@@ -7,6 +6,7 @@ export interface LoggedInUser {
   name: string
   role: UserRole
   departmentId: number | null
+  departmentName: string | null
   mustChangePassword: boolean
 }
 
@@ -20,4 +20,3 @@ export interface ApiResponse {
   success: boolean
   message: string
 }
-

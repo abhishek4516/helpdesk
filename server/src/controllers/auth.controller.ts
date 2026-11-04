@@ -21,6 +21,7 @@ interface UserRow extends RowDataPacket {
   password_hash: string
   role: 'master' | 'department_head' | 'employee'
   department_id: number | null
+  department_name: string | null
   is_active: number | boolean
   must_change_password: number | boolean
 }
@@ -38,14 +39,24 @@ export async function login(req: Request, res: Response) {
   try {
     const { identifier, password } = parsed.data
 
-    const users = await query<UserRow>(
-      `SELECT id, employee_id, email, full_name, password_hash,
-              role, department_id, is_active, must_change_password
-       FROM users
-       WHERE employee_id = ? OR email = ?
-       LIMIT 1`,
-      [identifier, identifier],
-    )
+   const users = await query<UserRow>(
+  `SELECT
+      u.id,
+      u.employee_id,
+      u.email,
+      u.full_name,
+      u.password_hash,
+      u.role,
+      u.department_id,
+      d.name AS department_name,
+      u.is_active,
+      u.must_change_password
+   FROM users u
+   LEFT JOIN departments d ON d.id = u.department_id
+   WHERE u.employee_id = ? OR u.email = ?
+   LIMIT 1`,
+  [identifier, identifier],
+)
 
     const user = users[0]
 
@@ -95,6 +106,7 @@ export async function login(req: Request, res: Response) {
         name: user.full_name,
         role: user.role,
         departmentId: user.department_id,
+        departmentName: user.department_name,
         mustChangePassword: Boolean(user.must_change_password),
       },
     })

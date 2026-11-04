@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react'
 import type { UserRole } from '../../types/auth'
 
@@ -8,7 +7,6 @@ interface SidebarProps {
   onNavigate: (page: string) => void
   onLogout: () => void
 }
-
 
 const navigationByRole: Record<
   UserRole,
@@ -32,6 +30,9 @@ const navigationByRole: Record<
     { label: 'Ticket Transfers', id: 'transfers', icon: 'forward' },
   ],
 }
+
+const focusRing =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-accent)'
 
 function NavIcon({ name }: { name: string }) {
   const common = {
@@ -234,36 +235,28 @@ export default function Sidebar({
       <aside
         id="helpdesk-sidebar"
         aria-label="Sidebar navigation"
-        aria-hidden={undefined}
         className={[
-          // IMPORTANT: do not add "relative" here.
-          // Mobile uses fixed positioning so the sidebar never pushes
-          // dashboard content down.
-          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh shrink-0 flex-col overflow-visible border-r',
+          // Do not add "relative" here. Mobile uses fixed positioning so the
+          // sidebar never pushes dashboard content down.
+          'fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh shrink-0 flex-col overflow-visible border-r border-(--color-border) bg-(--color-surface) text-(--color-text)',
           'w-[min(18rem,85vw)]',
           'transition-[transform,width] duration-200 ease-in-out',
           // Desktop becomes a normal sticky sidebar.
           'md:sticky md:top-0 md:z-20 md:h-screen md:max-h-screen md:shadow-none',
           // Mobile drawer visibility.
-          mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          mobileOpen
+            ? 'translate-x-0 shadow-2xl'
+            : '-translate-x-full md:translate-x-0',
           // Desktop collapsed / expanded widths.
           collapsed ? 'md:w-19' : 'md:w-60',
         ].join(' ')}
-        style={{
-          backgroundColor: 'var(--color-surface)',
-          borderColor: 'var(--color-border)',
-          color: 'var(--color-text)',
-          boxShadow: mobileOpen ? 'var(--color-shadow)' : undefined,
-        }}
       >
-        {/* Brand header */}
+        {/* Brand header: same height as the Topbar */}
         <div
           className={[
-            'flex min-h-19 shrink-0 items-center border-b px-4',
-            'justify-between gap-3',
+            'flex h-16 shrink-0 items-center justify-between gap-3 border-b border-(--color-border) px-4',
             collapsed ? 'md:justify-center md:px-2' : '',
           ].join(' ')}
-          style={{ borderColor: 'var(--color-border)' }}
         >
           <div
             className={[
@@ -272,14 +265,10 @@ export default function Sidebar({
             ].join(' ')}
           >
             <div
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-              style={{
-                backgroundColor: 'var(--color-accent-soft)',
-                color: 'var(--color-accent-text)',
-              }}
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-(--color-accent) text-white"
               aria-hidden="true"
             >
-              <svg viewBox="0 0 24 24" fill="none" className="size-6">
+              <svg viewBox="0 0 24 24" fill="none" className="size-5">
                 <path
                   d="M12 3.5 20 7.5V12.5C20 17 16.6 20 12 21C7.4 20 4 17 4 12.5V7.5L12 3.5Z"
                   stroke="currentColor"
@@ -300,10 +289,7 @@ export default function Sidebar({
               <p className="truncate text-sm font-bold tracking-tight">
                 Helpdesk
               </p>
-              <p
-                className="truncate text-xs"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
+              <p className="truncate text-xs text-(--color-text-secondary)">
                 Employee support
               </p>
             </div>
@@ -314,11 +300,7 @@ export default function Sidebar({
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Close navigation menu"
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl transition hover:opacity-75 md:hidden"
-            style={{
-              backgroundColor: 'var(--color-surface-secondary)',
-              color: 'var(--color-text-secondary)',
-            }}
+            className={`flex size-9 shrink-0 items-center justify-center rounded-full border border-(--color-border) text-(--color-text-secondary) transition hover:bg-white/4 hover:text-(--color-text) md:hidden ${focusRing}`}
           >
             <CloseIcon />
           </button>
@@ -327,18 +309,8 @@ export default function Sidebar({
         {/* Navigation links */}
         <nav
           aria-label="Main navigation"
-          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-3 py-6"
+          className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-3 py-5"
         >
-          <p
-            className={[
-              'px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em]',
-              collapsed ? 'md:hidden' : '',
-            ].join(' ')}
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
-            Workspace
-          </p>
-
           {navigation.map((item) => {
             const isActive = activePage === item.id
 
@@ -350,39 +322,14 @@ export default function Sidebar({
                 aria-current={isActive ? 'page' : undefined}
                 title={collapsed ? item.label : undefined}
                 className={[
-                  'relative flex min-h-11 w-full shrink-0 items-center rounded-xl text-left text-sm font-medium transition-colors',
-                  collapsed ? 'md:justify-center md:px-0' : 'gap-3 px-3',
+                  'flex min-h-11 w-full shrink-0 items-center rounded-full text-left text-sm font-medium transition-colors',
+                  focusRing,
+                  collapsed ? 'md:justify-center md:px-0' : 'gap-3 px-4',
+                  isActive
+                    ? 'bg-(--color-accent) text-white shadow-sm'
+                    : 'text-(--color-text-secondary) hover:bg-(--color-surface-secondary) hover:text-(--color-text)',
                 ].join(' ')}
-                style={{
-                  backgroundColor: isActive
-                    ? 'var(--color-accent-soft)'
-                    : 'transparent',
-                  color: isActive
-                    ? 'var(--color-accent-text)'
-                    : 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(event) => {
-                  if (!isActive) {
-                    event.currentTarget.style.backgroundColor =
-                      'var(--color-surface-secondary)'
-                    event.currentTarget.style.color = 'var(--color-text)'
-                  }
-                }}
-                onMouseLeave={(event) => {
-                  if (!isActive) {
-                    event.currentTarget.style.backgroundColor = 'transparent'
-                    event.currentTarget.style.color =
-                      'var(--color-text-secondary)'
-                  }
-                }}
               >
-                {isActive && (
-                  <span
-                    className="absolute bottom-2 left-0 top-2 w-0.75 rounded-r-full"
-                    style={{ backgroundColor: 'var(--color-accent)' }}
-                  />
-                )}
-
                 <NavIcon name={item.icon} />
 
                 <span className={collapsed ? 'md:hidden' : ''}>
@@ -394,29 +341,16 @@ export default function Sidebar({
         </nav>
 
         {/* Logout pinned to the bottom */}
-        <div
-          className="shrink-0 border-t p-3"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
+        <div className="shrink-0 border-t border-(--color-border) p-3">
           <button
             type="button"
             onClick={logout}
             title={collapsed ? 'Log out' : undefined}
             className={[
-              'flex min-h-11 w-full items-center rounded-xl text-left text-sm font-medium transition-colors',
-              collapsed ? 'md:justify-center md:px-0' : 'gap-3 px-3',
+              'flex min-h-11 w-full items-center rounded-full text-left text-sm font-medium text-(--color-text-secondary) transition-colors hover:bg-(--color-danger-bg) hover:text-(--color-danger-text)',
+              focusRing,
+              collapsed ? 'md:justify-center md:px-0' : 'gap-3 px-4',
             ].join(' ')}
-            style={{ color: 'var(--color-text-secondary)' }}
-            onMouseEnter={(event) => {
-              event.currentTarget.style.backgroundColor =
-                'var(--color-danger-bg)'
-              event.currentTarget.style.color = 'var(--color-danger-text)'
-            }}
-            onMouseLeave={(event) => {
-              event.currentTarget.style.backgroundColor = 'transparent'
-              event.currentTarget.style.color =
-                'var(--color-text-secondary)'
-            }}
           >
             <NavIcon name="logout" />
             <span className={collapsed ? 'md:hidden' : ''}>Log out</span>
@@ -429,12 +363,7 @@ export default function Sidebar({
           onClick={() => setCollapsed((current) => !current)}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="absolute -right-3 top-1/2 z-30 hidden size-7 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition hover:scale-105 md:flex"
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            borderColor: 'var(--color-border)',
-            color: 'var(--color-text-secondary)',
-          }}
+          className={`absolute top-1/2 -right-3 z-30 hidden size-7 -translate-y-1/2 items-center justify-center rounded-full border border-(--color-border) bg-(--color-surface) text-(--color-text-secondary) shadow-sm transition hover:scale-105 hover:text-(--color-text) md:flex ${focusRing}`}
         >
           <CollapseIcon collapsed={collapsed} />
         </button>

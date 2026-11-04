@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Topbar from "../components/layout/Topbar";
 import CreateTicketForm from "../components/tickets/CreateTicketForm";
-import TicketWorkflowPanel from "../components/tickets/TicketWorkflowPanel";
 import { getTickets, type Ticket } from "../services/ticketService";
 import {
   getTicketLifecycle,
@@ -12,6 +11,11 @@ import type { LoggedInUser } from "../types/auth";
 import DepartmentsPage from "./DepartmentsPage";
 import EmployeesPage from "./EmployeesPage";
 import TicketTransfersPage from "./TicketTransfersPage";
+
+/* -------------------------------------------------------------------------- */
+/* Types                                                                      */
+/* -------------------------------------------------------------------------- */
+
 interface DashboardPageProps {
   user: LoggedInUser;
   onLogout: () => void;
@@ -30,6 +34,13 @@ type TicketWithAssignment = Ticket & {
   assignedEmployeeId?: number | null;
 };
 
+type Tone = "indigo" | "sky" | "amber" | "emerald" | "slate";
+type SortOrder = "newest" | "oldest";
+
+/* -------------------------------------------------------------------------- */
+/* Constants                                                                  */
+/* -------------------------------------------------------------------------- */
+
 const pageTitles: Record<string, string> = {
   overview: "Overview",
   tickets: "Tickets",
@@ -38,14 +49,64 @@ const pageTitles: Record<string, string> = {
   departments: "Departments",
 };
 
+const toneStyles: Record<Tone, { bg: string; text: string }> = {
+  indigo: { bg: "bg-indigo-600", text: "text-indigo-600" },
+  sky: { bg: "bg-sky-500", text: "text-sky-600" },
+  amber: { bg: "bg-amber-500", text: "text-amber-600" },
+  emerald: { bg: "bg-emerald-500", text: "text-emerald-600" },
+  slate: { bg: "bg-slate-500", text: "text-slate-600" },
+};
+
+const kanbanColumns: { title: string; tone: Tone; statuses: string[] }[] = [
+  { title: "New", tone: "indigo", statuses: ["open"] },
+  {
+    title: "Open",
+    tone: "sky",
+    statuses: ["assigned", "in_progress", "reopened"],
+  },
+  { title: "Resolved", tone: "emerald", statuses: ["resolved"] },
+];
 const statusOptions = [
+  { value: "all", label: "All statuses" },
   { value: "open", label: "Open" },
   { value: "assigned", label: "Assigned" },
   { value: "in_progress", label: "In progress" },
+  { value: "reopened", label: "Reopened" },
   { value: "forwarding_requested", label: "Forwarding requested" },
   { value: "resolution_submitted", label: "Resolution submitted" },
+  { value: "resolution_pending", label: "Resolution pending" },
+  { value: "transfer_pending", label: "Transfer pending" },
   { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
 ];
+
+const avatarColors = [
+  "bg-indigo-500",
+  "bg-sky-500",
+  "bg-amber-500",
+  "bg-emerald-500",
+  "bg-rose-500",
+  "bg-violet-500",
+];
+
+const focusRing =
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-accent)";
+
+const primaryButton = `inline-flex items-center justify-center gap-1.5 rounded-full bg-(--color-accent) px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`;
+
+const secondaryButton = `inline-flex items-center justify-center rounded-full border border-(--color-border) px-5 py-2 text-sm font-medium text-(--color-text) transition hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`;
+
+const linkButton = `rounded text-sm font-medium text-(--color-accent) transition hover:opacity-80 ${focusRing}`;
+
+const fieldClass =
+  "w-full rounded-xl border border-(--color-border) bg-(--color-bg) px-3 py-2 text-sm text-(--color-text) outline-none transition placeholder:text-(--color-text-secondary) focus:border-(--color-accent) disabled:opacity-60";
+
+const cardClass =
+  "rounded-2xl border border-(--color-border) bg-(--color-surface) shadow-[0_2px_12px_rgba(15,23,42,0.06)]";
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
 
 function formatDate(date: string) {
   const parsedDate = new Date(date);
@@ -65,15 +126,145 @@ function formatStatus(status: string) {
   return status.replaceAll("_", " ");
 }
 
+function avatarColor(name: string) {
+  let sum = 0;
+  for (const char of name) sum += char.charCodeAt(0);
+  return avatarColors[sum % avatarColors.length];
+}
+
+function readLifecycleEvent(event: TicketLifecycleEvent, index: number) {
+  const record = event as unknown as Record<string, unknown>;
+
+  const rawType = String(
+    record.eventType ??
+      record.event_type ??
+      record.type ??
+      record.action ??
+      "activity",
+  );
+
+  const heading = String(
+    record.title ??
+      record.eventTitle ??
+      record.event_title ??
+      rawType.replaceAll("_", " "),
+  );
+
+  const isAssignment = /assign/i.test(`${rawType} ${heading}`);
+
+  const assignedEmployeeName =
+    record.toEmployeeName ??
+    record.to_employee_name ??
+    record.assignedEmployeeName ??
+    record.assigned_employee_name;
+
+  const rawDescription =
+    record.description ?? record.details ?? record.message;
+
+  const description = isAssignment
+    ? `Assigned to ${
+        assignedEmployeeName
+          ? String(assignedEmployeeName)
+          : "Employee name unavailable"
+      }`
+    : rawDescription;
+
+  const actor =
+    record.actorName ??
+    record.actor_name ??
+    record.performedBy ??
+    record.performed_by ??
+    record.userName ??
+    record.user_name;
+
+  const timestamp =
+    record.createdAt ??
+    record.created_at ??
+    record.eventAt ??
+    record.event_at ??
+    record.timestamp;
+
+  const parsedTimestamp = timestamp ? new Date(String(timestamp)) : null;
+
+  const dateLabel =
+    parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
+      ? parsedTimestamp.toLocaleString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "Time unavailable";
+
+  return {
+    key: String(
+      record.id ?? record.eventId ?? record.event_id ?? `${rawType}-${index}`,
+    ),
+    heading,
+    description:
+      description == null ? "" : String(description).trim(),
+    actor: actor == null ? "" : String(actor).trim(),
+    dateLabel,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Small presentational components                                            */
+/* -------------------------------------------------------------------------- */
+
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className="size-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="9" r="5.5" />
+      <path d="m13.5 13.5 3.5 3.5" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className="size-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M10 4v12M4 10h12" />
+    </svg>
+  );
+}
+
+function Avatar({ name }: { name: string }) {
+  const label = name.trim().charAt(0).toUpperCase() || "?";
+
+  return (
+    <span
+      title={name || "Unknown"}
+      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white ${avatarColor(name)}`}
+    >
+      {label}
+    </span>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   let background = "var(--color-surface-secondary)";
   let color = "var(--color-text-secondary)";
 
   switch (status) {
     case "open":
-      background = "var(--color-accent-soft)";
-      color = "var(--color-accent-text)";
-      break;
     case "assigned":
       background = "var(--color-accent-soft)";
       color = "var(--color-accent-text)";
@@ -92,15 +283,119 @@ function StatusBadge({ status }: { status: string }) {
 
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium capitalize"
+      className="inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize"
       style={{ backgroundColor: background, color }}
     >
-      <span
-        className="mr-1.5 size-1.5 rounded-full"
-        style={{ backgroundColor: color }}
-      />
       {formatStatus(status)}
     </span>
+  );
+}
+
+function ColumnPill({
+  title,
+  count,
+  tone,
+  onAdd,
+}: {
+  title: string;
+  count: number;
+  tone: Tone;
+  onAdd?: () => void;
+}) {
+  const styles = toneStyles[tone];
+
+  return (
+    <div
+      className={`flex items-center gap-2 rounded-full px-2 py-1.5 text-white ${styles.bg}`}
+    >
+      <span
+        className={`flex size-6 items-center justify-center rounded-full bg-white text-xs font-semibold ${styles.text}`}
+      >
+        {count}
+      </span>
+      <h3 className="flex-1 text-sm font-semibold">{title}</h3>
+      {onAdd && (
+        <button
+          type="button"
+          onClick={onAdd}
+          aria-label="Create a ticket"
+          className="flex size-6 items-center justify-center rounded-full transition hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-white"
+        >
+          <PlusIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PageHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <div className="min-w-0">
+        <h2 className="text-2xl font-semibold tracking-tight text-(--color-text)">
+          {title}
+        </h2>
+        {subtitle && (
+          <p className="mt-1 text-sm text-(--color-text-secondary)">
+            {subtitle}
+          </p>
+        )}
+      </div>
+      {action}
+    </header>
+  );
+}
+
+function Notice({
+  tone,
+  children,
+}: {
+  tone: "success" | "error";
+  children: React.ReactNode;
+}) {
+  const isSuccess = tone === "success";
+
+  return (
+    <div
+      role={isSuccess ? "status" : "alert"}
+      className="rounded-xl border border-(--color-border) px-4 py-3 text-sm"
+      style={{
+        backgroundColor: isSuccess ? "var(--color-success-bg)" : undefined,
+        color: isSuccess
+          ? "var(--color-success-text)"
+          : "var(--color-danger-text)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({
+  title,
+  message,
+  action,
+}: {
+  title: string;
+  message: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="px-4 py-14 text-center">
+      <h3 className="font-semibold text-(--color-text)">{title}</h3>
+      <p className="mx-auto mt-1.5 max-w-sm text-sm leading-6 text-(--color-text-secondary)">
+        {message}
+      </p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
   );
 }
 
@@ -117,60 +412,187 @@ function TicketRow({
     <button
       type="button"
       onClick={onClick}
-      aria-label={`View ticket ${ticket.ticketCode}`}
-      className="group grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 border-b px-3 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/[0.035] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-(--color-accent) sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:px-4"
-      style={{ borderColor: "var(--color-border)" }}
+      aria-label={`View ticket ${ticket.ticketCode}: ${ticket.title}`}
+      className="flex w-full min-w-0 items-center gap-3 border-b border-(--color-border) px-4 py-3.5 text-left transition-colors last:border-b-0 hover:bg-white/4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-accent)"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <span
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-xs font-semibold"
-          style={{ backgroundColor: "var(--color-accent-soft)", color: "var(--color-accent-text)" }}
-          aria-hidden="true"
+      <Avatar name={ticket.requesterName || ""} />
+
+      <div className="min-w-0 flex-1">
+        <p
+          className="truncate text-sm font-semibold text-(--color-text)"
+          title={ticket.title}
         >
-          {ticket.title.trim().charAt(0).toUpperCase() || "T"}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--color-accent)" }}>
-              {ticket.ticketCode}
-            </span>
-            <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>· {formatDate(ticket.createdAt)}</span>
-          </div>
-          <p className="mt-0.5 truncate text-sm font-medium transition-colors group-hover:text-(--color-accent)" style={{ color: "var(--color-text)" }} title={ticket.title}>
-            {ticket.title}
-          </p>
-          {ticket.description && (
-            <p className="mt-0.5 truncate text-xs" style={{ color: "var(--color-text-secondary)" }} title={ticket.description}>
-              {ticket.description}
-            </p>
+          {ticket.title}
+        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-(--color-text-secondary)">
+          <span className="font-medium text-(--color-accent)">
+            {ticket.ticketCode}
+          </span>
+          <span>{ticket.departmentName || "Unassigned"}</span>
+          {showRequester && (
+            <span>{ticket.requesterName || "Requester unavailable"}</span>
           )}
-        </div>
+          <span>{formatDate(ticket.createdAt)}</span>
+        </p>
       </div>
-      <div className="flex items-center justify-end gap-2 sm:min-w-32 sm:justify-start">
-        <StatusBadge status={ticket.status} />
-      </div>
-      <div className="col-span-2 hidden min-w-0 items-center gap-3 text-xs sm:col-span-1 sm:flex sm:max-w-48" style={{ color: "var(--color-text-secondary)" }}>
-        <span className="truncate">{ticket.departmentName || "Unassigned"}</span>
-        {showRequester && <><span aria-hidden="true">·</span><span className="truncate">{ticket.requesterName || "Requester unavailable"}</span></>}
-        <span className="ml-auto text-base opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true">→</span>
-      </div>
+
+      <StatusBadge status={ticket.status} />
     </button>
   );
 }
 
-export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
+function KanbanBoard({
+  tickets,
+  showRequester,
+  onOpen,
+  onCreate,
+}: {
+  tickets: Ticket[];
+  showRequester: boolean;
+  onOpen: (ticket: Ticket) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="overflow-x-auto pb-4">
+      <div className="flex min-w-max items-start gap-5">
+        {kanbanColumns.map((column) => {
+          const columnTickets = tickets.filter((ticket) =>
+            column.statuses.includes(ticket.status),
+          );
+
+          return (
+            <section
+              key={column.title}
+              aria-label={`${column.title} tickets`}
+              className="w-80 shrink-0 space-y-3"
+            >
+              <ColumnPill
+                title={column.title}
+                count={columnTickets.length}
+                tone={column.tone}
+                onAdd={column.title === "New" ? onCreate : undefined}
+              />
+
+              {columnTickets.map((ticket) => (
+                <button
+                  key={ticket.id}
+                  type="button"
+                  onClick={() => onOpen(ticket)}
+                  className={`block w-full p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${cardClass} ${focusRing}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <StatusBadge status={ticket.status} />
+                    <span className="shrink-0 text-[11px] text-(--color-text-secondary)">
+                      {formatDate(ticket.createdAt)}
+                    </span>
+                  </div>
+
+                  <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-(--color-text)">
+                    {ticket.title}
+                  </p>
+
+                  {ticket.description && (
+                    <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-(--color-text-secondary)">
+                      {ticket.description}
+                    </p>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar name={ticket.requesterName || ""} />
+                      {showRequester && (
+                        <span className="truncate text-xs text-(--color-text-secondary)">
+                          {ticket.requesterName || "Unavailable"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="max-w-32 shrink-0 truncate text-xs text-(--color-text-secondary)">
+                      {ticket.departmentName || "Unassigned"}
+                    </span>
+                  </div>
+                </button>
+              ))}
+
+              {columnTickets.length === 0 && (
+                <p className="rounded-2xl border border-dashed border-(--color-border) px-3 py-8 text-center text-xs text-(--color-text-secondary)">
+                  No tickets
+                </p>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ events }: { events: TicketLifecycleEvent[] }) {
+  return (
+    <ol className="relative space-y-5 border-l border-(--color-border) pl-5">
+      {events.map((event, index) => {
+        const item = readLifecycleEvent(event, index);
+
+        return (
+          <li key={item.key} className="relative">
+            <span
+              className="absolute top-1.5 -left-6.25 size-2 rounded-full bg-(--color-accent)"
+              aria-hidden="true"
+            />
+            <p className="text-sm font-medium capitalize text-(--color-text)">
+              {item.heading}
+            </p>
+            <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+              {item.dateLabel}
+              {item.actor ? `, by ${item.actor}` : ""}
+            </p>
+            {item.description && (
+              <p className="mt-1.5 whitespace-pre-wrap wrap-break-word text-sm leading-6 text-(--color-text-secondary)">
+                {item.description}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// function DetailItem({ label, value }: { label: string; value: string }) {
+//   return (
+//     <div className="min-w-0">
+//       <dt className="text-xs text-(--color-text-secondary)">{label}</dt>
+//       <dd className="mt-0.5 break-words text-sm font-medium capitalize text-(--color-text)">
+//         {value}
+//       </dd>
+//     </div>
+//   );
+// }
+
+/* -------------------------------------------------------------------------- */
+/* Page                                                                       */
+/* -------------------------------------------------------------------------- */
+
+export default function DashboardPage({
+  user,
+  onLogout,
+}: DashboardPageProps) {
   const [activePage, setActivePage] = useState("overview");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loadingTickets, setLoadingTickets] = useState(false);
   const [ticketError, setTicketError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [lifecycleEvents, setLifecycleEvents] = useState<TicketLifecycleEvent[]>([]);
+  const [lifecycleEvents, setLifecycleEvents] = useState<
+    TicketLifecycleEvent[]
+  >([]);
   const [loadingLifecycle, setLoadingLifecycle] = useState(false);
   const [lifecycleError, setLifecycleError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [ticketView, setTicketView] = useState<"list" | "kanban">("kanban");
+
   const [assignableEmployees, setAssignableEmployees] = useState<
     AssignableEmployee[]
   >([]);
@@ -178,6 +600,11 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   const [assignmentEmployeeId, setAssignmentEmployeeId] = useState("");
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [assignmentError, setAssignmentError] = useState("");
+
+  const canManageAssignments =
+    user.role === "master" || user.role === "department_head";
+
+  /* ------------------------------ Data loading ----------------------------- */
 
   const loadTickets = useCallback(async () => {
     setLoadingTickets(true);
@@ -221,27 +648,29 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     setAssignmentError("");
 
     try {
-      const response = await fetch(
-        "http://localhost:5000/api/employees/assignable",
-        {
-          credentials: "include",
-        },
-      );
+      const response = await fetch("http://localhost:5000/api/employees/assignable", {
+        credentials: "include",
+      });
       const data = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Unable to load employees.");
       }
 
-      // The employee API may expose camelCase or database-style snake_case
-      // fields. Normalize them before filtering so valid employees aren't hidden.
-      const rawEmployees = Array.isArray(data.employees) ? data.employees : [];
+      const rawEmployees = Array.isArray(data.employees)
+        ? data.employees
+        : [];
+
       const normalizedEmployees: AssignableEmployee[] = rawEmployees.map(
         (raw: Record<string, unknown>) => ({
           id: Number(raw.id),
           employeeId: String(raw.employeeId ?? raw.employee_id ?? ""),
-          fullName: String(raw.fullName ?? raw.full_name ?? raw.name ?? ""),
-          role: String(raw.role ?? "employee") as AssignableEmployee["role"],
+          fullName: String(
+            raw.fullName ?? raw.full_name ?? raw.name ?? "",
+          ),
+          role: String(
+            raw.role ?? "employee",
+          ) as AssignableEmployee["role"],
           departmentId:
             raw.departmentId == null && raw.department_id == null
               ? null
@@ -267,7 +696,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
       );
     } catch (error) {
       setAssignmentError(
-        error instanceof Error ? error.message : "Unable to load employees.",
+        error instanceof Error
+          ? error.message
+          : "Unable to load employees.",
       );
     } finally {
       setLoadingEmployees(false);
@@ -277,15 +708,18 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadTickets();
+
     if (user.role === "master" || user.role === "department_head") {
       void loadAssignableEmployees();
     }
   }, [loadTickets, loadAssignableEmployees, user.role]);
 
+  /* ------------------------------ Derived data ----------------------------- */
+
   const filteredTickets = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return tickets.filter((ticket) => {
+    const matches = tickets.filter((ticket) => {
       const matchesSearch =
         !query ||
         [
@@ -301,17 +735,42 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
 
       return matchesSearch && matchesStatus;
     });
-  }, [tickets, searchQuery, statusFilter]);
 
-  const openCount = tickets.filter((ticket) => ticket.status === "open").length;
+    const time = (ticket: Ticket) => {
+      const value = new Date(ticket.createdAt).getTime();
+      return Number.isNaN(value) ? 0 : value;
+    };
+
+    return [...matches].sort((a, b) =>
+      sortOrder === "newest" ? time(b) - time(a) : time(a) - time(b),
+    );
+  }, [tickets, searchQuery, statusFilter, sortOrder]);
+
+  const openCount = tickets.filter(
+    (ticket) => ticket.status === "open",
+  ).length;
 
   const inProgressCount = tickets.filter((ticket) =>
-    ["assigned", "in_progress", "forwarding_requested"].includes(ticket.status),
+    ["assigned", "in_progress", "forwarding_requested"].includes(
+      ticket.status,
+    ),
   ).length;
 
   const resolvedCount = tickets.filter(
     (ticket) => ticket.status === "resolved",
   ).length;
+
+  const hasFilters = Boolean(searchQuery.trim()) || statusFilter !== "all";
+  const showRequester = user.role !== "employee";
+
+  /* -------------------------------- Actions -------------------------------- */
+
+  function startCreateTicket() {
+    setSuccessMessage("");
+    setSelectedTicket(null);
+    setActivePage("tickets");
+    setShowCreateForm(true);
+  }
 
   function openTickets() {
     setShowCreateForm(false);
@@ -324,7 +783,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     setShowCreateForm(false);
     setSuccessMessage("");
     setAssignmentError("");
+
     const assignedId = (ticket as TicketWithAssignment).assignedEmployeeId;
+
     setAssignmentEmployeeId(assignedId ? String(assignedId) : "");
     setSelectedTicket(ticket);
     void loadTicketLifecycle(ticket.id);
@@ -333,24 +794,16 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
 
   function handleTicketCreated() {
     setShowCreateForm(false);
-    setSuccessMessage("Ticket created successfully!");
+    setSuccessMessage("Ticket created successfully.");
     setActivePage("tickets");
     void loadTickets();
   }
 
-  async function refreshSelectedTicket() {
-    const freshTickets = await getTickets();
-    setTickets(freshTickets);
-    if (selectedTicket) {
-      const updated = freshTickets.find((item) => item.id === selectedTicket.id);
-      if (updated) setSelectedTicket(updated);
-      void loadTicketLifecycle(selectedTicket.id);
-    }
-  }
-
   async function handleAssignTicket() {
     if (!selectedTicket || !assignmentEmployeeId) {
-      setAssignmentError("Choose an employee before assigning this ticket.");
+      setAssignmentError(
+        "Choose an employee before assigning this ticket.",
+      );
       return;
     }
 
@@ -365,9 +818,12 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ employeeId: Number(assignmentEmployeeId) }),
+          body: JSON.stringify({
+            employeeId: Number(assignmentEmployeeId),
+          }),
         },
       );
+
       const data = await response.json();
 
       if (!response.ok || !data.success) {
@@ -376,8 +832,10 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
 
       setSuccessMessage("Ticket assigned successfully.");
       await loadTickets();
+
       setSelectedTicket((current) => {
         if (!current) return current;
+
         return {
           ...current,
           assignedEmployeeId: Number(assignmentEmployeeId),
@@ -394,48 +852,30 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     }
   }
 
-  function renderTicketCards(items: Ticket[]) {
+  /* ------------------------------- Renderers ------------------------------- */
+
+  function renderTicketList(items: Ticket[]) {
     if (loadingTickets) {
       return (
         <div
-          className="rounded-xl border px-4 py-12 text-center"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-            color: "var(--color-text-secondary)",
-          }}
+          className={`flex items-center justify-center gap-3 px-4 py-14 text-sm text-(--color-text-secondary) ${cardClass}`}
         >
-          <div className="mx-auto mb-3 size-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          <p className="text-sm">Loading tickets...</p>
+          <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          Loading tickets…
         </div>
       );
     }
 
     if (ticketError) {
       return (
-        <div
-          className="rounded-xl border p-6"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <p
-            role="alert"
-            className="text-sm"
-            style={{ color: "var(--color-danger-text)" }}
-          >
+        <div className={`space-y-3 p-6 ${cardClass}`}>
+          <p role="alert" className="text-sm text-(--color-danger-text)">
             {ticketError}
           </p>
-
           <button
             type="button"
             onClick={() => void loadTickets()}
-            className="mt-4 rounded-lg border px-4 py-2 text-sm font-medium transition hover:opacity-80"
-            style={{
-              borderColor: "var(--color-border)",
-              color: "var(--color-text)",
-            }}
+            className={secondaryButton}
           >
             Try again
           </button>
@@ -444,78 +884,62 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     }
 
     if (items.length === 0) {
-      const hasFilters = Boolean(searchQuery.trim()) || statusFilter !== "all";
-
       return (
-        <div
-          className="rounded-xl border px-4 py-12 text-center"
-          style={{
-            backgroundColor: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <div
-            className="mx-auto flex size-12 items-center justify-center rounded-xl text-xl"
-            style={{
-              backgroundColor: "var(--color-accent-soft)",
-              color: "var(--color-accent-text)",
-            }}
-          >
-            {hasFilters ? "⌕" : "＋"}
-          </div>
-
-          <h3
-            className="mt-4 font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            {hasFilters ? "No matching tickets" : "No tickets yet"}
-          </h3>
-
-          <p
-            className="mx-auto mt-2 max-w-sm text-sm leading-6"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
-            {hasFilters
-              ? "Try another search term or change the status filter."
-              : "Your support requests will appear here when they are created."}
-          </p>
-
+        <div className={cardClass}>
           {hasFilters ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("all");
-              }}
-              className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold"
-              style={{
-                backgroundColor: "var(--color-accent-soft)",
-                color: "var(--color-accent-text)",
-              }}
-            >
-              Clear filters
-            </button>
+            <EmptyState
+              title="No matching tickets"
+              message="Try a different search or change the status filter."
+              action={
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStatusFilter("all");
+                  }}
+                  className={secondaryButton}
+                >
+                  Clear filters
+                </button>
+              }
+            />
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowCreateForm(true)}
-              className="mt-4 rounded-lg px-4 py-2.5 text-sm font-semibold text-white"
-              style={{ backgroundColor: "var(--color-accent)" }}
-            >
-              Create your first ticket
-            </button>
+            <EmptyState
+              title="No tickets yet"
+              message="Support requests will show up here once they are created."
+              action={
+                <button
+                  type="button"
+                  onClick={startCreateTicket}
+                  className={primaryButton}
+                >
+                  Create a ticket
+                </button>
+              }
+            />
           )}
         </div>
       );
     }
 
+    if (ticketView === "kanban") {
+      return (
+        <KanbanBoard
+          tickets={items}
+          showRequester={showRequester}
+          onOpen={openTicketDetails}
+          onCreate={startCreateTicket}
+        />
+      );
+    }
+
     return (
-      <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+      <div className={`overflow-hidden ${cardClass}`}>
         {items.map((ticket) => (
           <TicketRow
             key={ticket.id}
             ticket={ticket}
-            showRequester={user.role !== "employee"}
+            showRequester={showRequester}
             onClick={() => openTicketDetails(ticket)}
           />
         ))}
@@ -523,817 +947,622 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
     );
   }
 
+
+
+function renderTicketDetail(ticket: Ticket) {
+  const assignedId = (ticket as TicketWithAssignment).assignedEmployeeId;
+
+  const assignedEmployee = assignableEmployees.find(
+    (employee) => employee.id === assignedId,
+  );
+
+  const assignedLabel = assignedEmployee
+    ? `${assignedEmployee.fullName} (${assignedEmployee.employeeId})`
+    : assignedId
+      ? assignedId === user.id
+        ? "You"
+        : `Employee #${assignedId}`
+      : "Not assigned";
+
+  const canTransfer =
+    user.role === "master" ||
+    (user.role === "employee" && assignedId === user.id);
+
+  const canAssign =
+    canManageAssignments && ticket.status === "open" && !assignedId;
+
+  const detailRows = [
+    {
+      label: "Department",
+      value: ticket.departmentName || "Unassigned",
+      icon: "▦",
+    },
+    {
+      label: "Requester",
+      value:
+        ticket.requesterName ||
+        (user.role === "employee" ? user.name : "Not available"),
+      icon: "◉",
+    },
+    {
+      label: "Created",
+      value: formatDate(ticket.createdAt),
+      icon: "◷",
+    },
+    {
+      label: "Assigned to",
+      value: assignedLabel,
+      icon: "↗",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+
+      {/* Back navigation */}
+      <button
+        type="button"
+        onClick={() => setSelectedTicket(null)}
+        className={`${linkButton} inline-flex items-center gap-2`}
+      >
+        <span aria-hidden="true">←</span>
+        Back to tickets
+      </button>
+
+      {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+      {/* Ticket header */}
+      <section
+        className={`relative overflow-hidden ${cardClass}`}
+      >
+        <div className="absolute inset-x-0 top-0 h-1 bg-linear-to-r from-violet-500 via-indigo-500 to-sky-500" />
+
+        <div className="flex flex-wrap items-start justify-between gap-5 p-6 sm:p-7">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="rounded-md bg-(--color-accent-soft) px-2.5 py-1 font-semibold text-(--color-accent-text)">
+                {ticket.ticketCode}
+              </span>
+              <span className="text-(--color-text-secondary)">/</span>
+              <span className="text-(--color-text-secondary)">
+                Created {formatDate(ticket.createdAt)}
+              </span>
+            </div>
+
+            <h2 className="mt-4 wrap-break-word text-2xl font-bold tracking-tight text-(--color-text) sm:text-3xl">
+              {ticket.title}
+            </h2>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <StatusBadge status={ticket.status} />
+
+              <span className="inline-flex items-center gap-2 rounded-full border border-(--color-border) px-3 py-1 text-xs font-medium text-(--color-text-secondary)">
+                <span className="size-1.5 rounded-full bg-(--color-accent)" />
+                {ticket.departmentName || "Unassigned department"}
+              </span>
+            </div>
+          </div>
+
+          <div className="hidden size-14 items-center justify-center rounded-2xl bg-(--color-accent-soft) text-2xl text-(--color-accent) sm:flex">
+            ◈
+          </div>
+        </div>
+      </section>
+
+      {/* Main layout */}
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+
+        {/* Main content */}
+        <div className="min-w-0 space-y-5">
+
+          {/* Description */}
+          <section className={`${cardClass} overflow-hidden`}>
+            <div className="flex items-center gap-3 border-b border-(--color-border) px-5 py-4">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-(--color-accent-soft) text-lg text-(--color-accent)">
+                ≡
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-(--color-text)">
+                  Description
+                </h3>
+                <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                  Details provided with this support request
+                </p>
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              <p className="whitespace-pre-wrap wrap-break-word text-sm leading-7 text-(--color-text-secondary)">
+                {ticket.description || "No description provided."}
+              </p>
+            </div>
+          </section>
+
+          {/* Activity */}
+          <section className={`${cardClass} overflow-hidden`}>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-(--color-border) px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-xl bg-(--color-accent-soft) text-lg text-(--color-accent)">
+                  ◷
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-(--color-text)">
+                    Activity timeline
+                  </h3>
+                  <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                    Complete history of this ticket
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void loadTicketLifecycle(ticket.id)}
+                disabled={loadingLifecycle}
+                className={`${linkButton} disabled:opacity-50`}
+              >
+                {loadingLifecycle ? "Refreshing…" : "↻ Refresh"}
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              {loadingLifecycle ? (
+                <div className="flex items-center gap-3 py-8 text-sm text-(--color-text-secondary)">
+                  <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Loading activity…
+                </div>
+              ) : lifecycleError ? (
+                <div role="alert" className="space-y-3 py-3">
+                  <p className="text-sm text-(--color-danger-text)">
+                    {lifecycleError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void loadTicketLifecycle(ticket.id)}
+                    className={secondaryButton}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : lifecycleEvents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-(--color-border) px-4 py-10 text-center">
+                  <p className="text-sm font-medium text-(--color-text)">
+                    No activity yet
+                  </p>
+                  <p className="mt-1 text-xs text-(--color-text-secondary)">
+                    Ticket updates will appear here.
+                  </p>
+                </div>
+              ) : (
+                <Timeline events={lifecycleEvents} />
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* Sidebar */}
+        <aside className="min-w-0 space-y-5">
+
+          {/* Details card */}
+          <section className={`${cardClass} overflow-hidden`}>
+            <div className="border-b border-(--color-border) px-5 py-4">
+              <h3 className="text-sm font-semibold text-(--color-text)">
+                Ticket details
+              </h3>
+              <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                Request information
+              </p>
+            </div>
+
+            <div className="divide-y divide-(--color-border) px-5">
+              {detailRows.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-start gap-3 py-4"
+                >
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-(--color-bg) text-sm text-(--color-accent)">
+                    {item.icon}
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-(--color-text-secondary)">
+                      {item.label}
+                    </p>
+                    <p className="mt-1 wrap-break-word text-sm font-semibold text-(--color-text)">
+                      {item.value}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-(--color-border) px-5 py-4">
+              <p className="mb-2 text-xs text-(--color-text-secondary)">
+                Current status
+              </p>
+              <StatusBadge status={ticket.status} />
+            </div>
+          </section>
+
+         
+          {canAssign && (
+            <section className={`${cardClass} overflow-hidden`}>
+              <div className="border-b border-(--color-border) px-5 py-4">
+                <h3 className="text-sm font-semibold text-(--color-text)">
+                  Assign ticket
+                </h3>
+                <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                  Select an employee to handle this request.
+                </p>
+              </div>
+
+              <div className="space-y-3 p-5">
+                <label
+                  htmlFor="assign-employee"
+                  className="block text-xs font-medium text-(--color-text-secondary)"
+                >
+                  Employee
+                </label>
+
+                <select
+                  id="assign-employee"
+                  value={assignmentEmployeeId}
+                  onChange={(event) => {
+                    setAssignmentEmployeeId(event.target.value);
+                    setAssignmentError("");
+                  }}
+                  disabled={loadingEmployees || savingAssignment}
+                  className={fieldClass}
+                >
+                  <option value="">
+                    {loadingEmployees
+                      ? "Loading employees…"
+                      : "Select an employee"}
+                  </option>
+
+                  {assignableEmployees.map((employee) => (
+                    <option key={employee.id} value={employee.id}>
+                      {employee.fullName} ({employee.employeeId})
+                    </option>
+                  ))}
+                </select>
+
+                {assignmentError && (
+                  <p role="alert" className="text-xs text-(--color-danger-text)">
+                    {assignmentError}
+                  </p>
+                )}
+
+                {!loadingEmployees && assignableEmployees.length === 0 && (
+                  <p className="text-xs text-(--color-text-secondary)">
+                    No active employees are available.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => void handleAssignTicket()}
+                  disabled={
+                    !assignmentEmployeeId ||
+                    savingAssignment ||
+                    loadingEmployees
+                  }
+                  className={`${primaryButton} w-full`}
+                >
+                  {savingAssignment ? "Assigning…" : "Assign ticket"}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Transfer action */}
+          {canTransfer && (
+            <section className={`${cardClass} overflow-hidden`}>
+              <div className="p-5">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex size-9 items-center justify-center rounded-xl bg-(--color-accent-soft) text-lg text-(--color-accent)">
+                    ⇄
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-(--color-text)">
+                      Ticket actions
+                    </h3>
+                    <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                      Move this ticket to another department
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActivePage("transfers")}
+                  className={`${primaryButton} w-full`}
+                >
+                  ⇄ Transfer ticket
+                </button>
+              </div>
+            </section>
+          )}
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+
+  function renderTicketsPage() {
+    if (selectedTicket) {
+      return renderTicketDetail(selectedTicket);
+    }
+
+    if (showCreateForm) {
+      return (
+        <CreateTicketForm
+          onSuccess={handleTicketCreated}
+          onCancel={() => setShowCreateForm(false)}
+        />
+      );
+    }
+
+    const title =
+      user.role === "employee"
+        ? "My tickets"
+        : user.role === "department_head"
+          ? "Department tickets"
+          : "All tickets";
+
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title={title}
+          subtitle="Search, filter and track support requests."
+          action={
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="relative block">
+                <span className="sr-only">Search tickets</span>
+                <span className="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-(--color-text-secondary)">
+                  <SearchIcon />
+                </span>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search tickets"
+                  className="w-48 rounded-full border border-(--color-border) bg-(--color-surface) py-2 pr-4 pl-9 text-sm text-(--color-text) outline-none transition placeholder:text-(--color-text-secondary) focus:border-(--color-accent) sm:w-60"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={startCreateTicket}
+                className={primaryButton}
+              >
+                <PlusIcon />
+                New ticket
+              </button>
+            </div>
+          }
+        />
+
+        {successMessage && <Notice tone="success">{successMessage}</Notice>}
+
+        {/* Tabs and controls */}
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b border-(--color-border)">
+          <div role="tablist" aria-label="Ticket view" className="flex gap-6">
+            {(
+              [
+                { id: "kanban", label: "Board" },
+                { id: "list", label: "List" },
+              ] as const
+            ).map((tab) => {
+              const active = ticketView === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setTicketView(tab.id)}
+                  className={`-mb-px flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition ${focusRing} ${
+                    active
+                      ? "border-(--color-accent) text-(--color-accent)"
+                      : "border-transparent text-(--color-text-secondary) hover:text-(--color-text)"
+                  }`}
+                >
+                  {tab.label}
+                  {active && (
+                    <span className="rounded-full border border-(--color-accent) px-2 py-px text-[11px] font-semibold">
+                      {loadingTickets ? "…" : filteredTickets.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pb-2.5">
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Filter by status"
+              className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2.5 py-1.5 text-xs text-(--color-text) outline-none focus:border-(--color-accent)"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <label className="flex items-center gap-2 text-xs font-medium text-(--color-text)">
+              Sort by
+              <select
+                value={sortOrder}
+                onChange={(event) =>
+                  setSortOrder(event.target.value as SortOrder)
+                }
+                className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2.5 py-1.5 text-xs font-normal text-(--color-text) outline-none focus:border-(--color-accent)"
+              >
+                <option value="newest">Newest</option>
+                <option value="oldest">Oldest</option>
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void loadTickets()}
+              disabled={loadingTickets}
+              className={`${linkButton} text-xs disabled:opacity-50`}
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {renderTicketList(filteredTickets)}
+      </div>
+    );
+  }
+
+  function renderOverviewPage() {
+    const stats: { label: string; value: number; tone: Tone }[] = [
+      { label: "All tickets", value: tickets.length, tone: "indigo" },
+      { label: "Open", value: openCount, tone: "sky" },
+      { label: "In progress", value: inProgressCount, tone: "amber" },
+      { label: "Resolved", value: resolvedCount, tone: "emerald" },
+    ];
+
+    const recentTickets = tickets.slice(0, 5);
+
+    return (
+      <div className="space-y-8">
+        <PageHeader
+          title={`Welcome back, ${user.name}`}
+          subtitle="Here is where your support tickets stand."
+          action={
+            <button
+              type="button"
+              onClick={startCreateTicket}
+              className={primaryButton}
+            >
+              <PlusIcon />
+              New ticket
+            </button>
+          }
+        />
+
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {stats.map((stat) => (
+            <div key={stat.label} className={`p-4 sm:p-5 ${cardClass}`}>
+              <dt>
+                <span
+                  className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold text-white ${toneStyles[stat.tone].bg}`}
+                >
+                  {stat.label}
+                </span>
+              </dt>
+              <dd className="mt-3 text-3xl font-semibold tracking-tight text-(--color-text)">
+                {loadingTickets ? "—" : stat.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+
+        <section aria-labelledby="recent-tickets-heading" className="min-w-0">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3
+              id="recent-tickets-heading"
+              className="text-sm font-semibold text-(--color-text)"
+            >
+              Recent tickets
+            </h3>
+            {tickets.length > 0 && (
+              <button
+                type="button"
+                onClick={openTickets}
+                className={linkButton}
+              >
+                View all
+              </button>
+            )}
+          </div>
+
+          {loadingTickets ? (
+            <p className="py-6 text-sm text-(--color-text-secondary)">
+              Loading recent tickets…
+            </p>
+          ) : ticketError ? (
+            <div className="space-y-2 py-2">
+              <p role="alert" className="text-sm text-(--color-danger-text)">
+                {ticketError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadTickets()}
+                className={linkButton}
+              >
+                Try again
+              </button>
+            </div>
+          ) : recentTickets.length === 0 ? (
+            <div className={cardClass}>
+              <EmptyState
+                title="No tickets yet"
+                message="Create your first ticket to get help from your team."
+                action={
+                  <button
+                    type="button"
+                    onClick={startCreateTicket}
+                    className={primaryButton}
+                  >
+                    Create a ticket
+                  </button>
+                }
+              />
+            </div>
+          ) : (
+            <div className={`overflow-hidden ${cardClass}`}>
+              {recentTickets.map((ticket) => (
+                <TicketRow
+                  key={ticket.id}
+                  ticket={ticket}
+                  showRequester={showRequester}
+                  onClick={() => openTicketDetails(ticket)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    );
+  }
+
   function renderContent() {
     switch (activePage) {
       case "tickets":
-        return (
-          <div className="space-y-5">
-            {selectedTicket ? (
-              <section
-                className="space-y-5 rounded-xl border p-5 sm:p-7"
-                style={{
-                  backgroundColor: "var(--color-surface)",
-                  borderColor: "var(--color-border)",
-                }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTicket(null)}
-                      className="mb-4 text-sm font-semibold transition hover:opacity-75"
-                      style={{ color: "var(--color-accent)" }}
-                    >
-                      ← Back to tickets
-                    </button>
-                    <p
-                      className="text-xs font-semibold tracking-wide"
-                      style={{ color: "var(--color-accent)" }}
-                    >
-                      {selectedTicket.ticketCode}
-                    </p>
-                    <h2
-                      className="mt-2 wrap-break-word text-2xl font-semibold tracking-tight"
-                      style={{ color: "var(--color-text)" }}
-                    >
-                      {selectedTicket.title}
-                    </h2>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-  {(user.role === 'master' ||
-    (user.role === 'employee' &&
-      (selectedTicket as TicketWithAssignment).assignedEmployeeId ===
-        user.id)) && (
-    <button
-      type="button"
-      onClick={() => setActivePage('transfers')}
-      className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700"
-    >
-      Transfer Ticket
-    </button>
-  )}
+        return renderTicketsPage();
 
-  <StatusBadge status={selectedTicket.status} />
-</div>
-                </div>
+      case "overview":
+        return renderOverviewPage();
 
-                <div
-                  className="border-t pt-5"
-                  style={{ borderColor: "var(--color-border)" }}
-                >
-                  <h3
-                    className="text-sm font-semibold"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    Description
-                  </h3>
-                  <p
-                    className="mt-2 whitespace-pre-wrap break-words text-sm leading-7"
-                    style={{ color: "var(--color-text-secondary)" }}
-                  >
-                    {selectedTicket.description || "No description provided."}
-                  </p>
-                </div>
-
-                <div
-                  className="grid grid-cols-1 gap-4 border-t pt-5 sm:grid-cols-2 lg:grid-cols-3"
-                  style={{ borderColor: "var(--color-border)" }}
-                >
-                  {[
-                    {
-                      label: "Department",
-                      value: selectedTicket.departmentName || "Unassigned",
-                    },
-                    {
-                      label: "Requester",
-                      value:
-                        selectedTicket.requesterName ||
-                        (user.role === "employee"
-                          ? user.name
-                          : "Not available"),
-                    },
-                    {
-                      label: "Created",
-                      value: formatDate(selectedTicket.createdAt),
-                    },
-                    {
-                      label: "Status",
-                      value: formatStatus(selectedTicket.status),
-                    },
-                  ].map((item) => (
-                    <div key={item.label} className="min-w-0">
-                      <p
-                        className="text-xs"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        {item.label}
-                      </p>
-                      <p
-                        className="mt-1 break-words text-sm font-medium capitalize"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {item.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <section
-                  className="space-y-4 border-t pt-5"
-                  style={{ borderColor: "var(--color-border)" }}
-                  aria-labelledby="ticket-lifecycle-heading"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h3
-                        id="ticket-lifecycle-heading"
-                        className="text-sm font-semibold"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        Ticket activity
-                      </h3>
-                      <p
-                        className="mt-1 text-sm"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        A timeline of recorded events for this ticket.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void loadTicketLifecycle(selectedTicket.id)}
-                      disabled={loadingLifecycle}
-                      className="rounded-lg border px-3 py-1.5 text-xs font-semibold transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        color: "var(--color-text)",
-                      }}
-                    >
-                      {loadingLifecycle ? "Refreshing…" : "Refresh activity"}
-                    </button>
-                  </div>
-
-                  {loadingLifecycle ? (
-                    <div
-                      className="rounded-lg border p-4 text-sm"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      Loading ticket activity…
-                    </div>
-                  ) : lifecycleError ? (
-                    <div
-                      role="alert"
-                      className="rounded-lg border p-4"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        backgroundColor: "var(--color-bg)",
-                      }}
-                    >
-                      <p className="text-sm" style={{ color: "var(--color-danger-text)" }}>
-                        {lifecycleError}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => void loadTicketLifecycle(selectedTicket.id)}
-                        className="mt-2 text-sm font-semibold"
-                        style={{ color: "var(--color-accent)" }}
-                      >
-                        Try again
-                      </button>
-                    </div>
-                  ) : lifecycleEvents.length === 0 ? (
-                    <div
-                      className="rounded-lg border p-4 text-sm"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        color: "var(--color-text-secondary)",
-                      }}
-                    >
-                      No lifecycle events were returned for this ticket yet.
-                    </div>
-                  ) : (
-                    <ol className="space-y-0">
-                      {lifecycleEvents.map((event, index) => {
-                        const record = event as unknown as Record<string, unknown>;
-                        const rawType = String(
-                          record.eventType ?? record.event_type ?? record.type ?? record.action ?? "activity",
-                        );
-                        const heading = String(
-                          record.title ?? record.eventTitle ?? record.event_title ??
-                          rawType.replaceAll("_", " "),
-                        );
-                        const description = record.description ?? record.details ?? record.message;
-                        const actor = record.actorName ?? record.actor_name ?? record.performedBy ?? record.performed_by ?? record.userName ?? record.user_name;
-                        const timestamp = record.createdAt ?? record.created_at ?? record.eventAt ?? record.event_at ?? record.timestamp;
-                        const parsedTimestamp = timestamp ? new Date(String(timestamp)) : null;
-                        const dateLabel = parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
-                          ? parsedTimestamp.toLocaleString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })
-                          : "Time unavailable";
-                        return (
-                          <li key={String(record.id ?? record.eventId ?? record.event_id ?? `${rawType}-${index}`)} className="relative flex gap-3 pb-5 last:pb-0">
-                            <div className="flex w-5 shrink-0 flex-col items-center">
-                              <span
-                                className="mt-1.5 size-2.5 rounded-full ring-4"
-                                style={{
-                                  backgroundColor: "var(--color-accent)",
-                                  outlineColor: "var(--color-accent-soft)",
-                                }}
-                              />
-                              {index < lifecycleEvents.length - 1 && (
-                                <span
-                                  className="mt-2 w-px flex-1"
-                                  style={{ backgroundColor: "var(--color-border)" }}
-                                />
-                              )}
-                            </div>
-                            <div
-                              className="min-w-0 flex-1 rounded-lg border p-3"
-                              style={{
-                                borderColor: "var(--color-border)",
-                                backgroundColor: "var(--color-bg)",
-                              }}
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                <h4
-                                  className="text-sm font-semibold capitalize"
-                                  style={{ color: "var(--color-text)" }}
-                                >
-                                  {heading}
-                                </h4>
-                                <time
-                                  className="text-xs"
-                                  style={{ color: "var(--color-text-secondary)" }}
-                                >
-                                  {dateLabel}
-                                </time>
-                              </div>
-                              {actor != null && String(actor).trim() !== "" && (
-                                <p className="mt-1 text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                                  By {String(actor)}
-                                </p>
-                              )}
-                              {description != null && String(description).trim() !== "" && (
-                                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6" style={{ color: "var(--color-text-secondary)" }}>
-                                  {String(description)}
-                                </p>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  )}
-                </section>
-
-                <TicketWorkflowPanel
-                  ticket={selectedTicket}
-                  user={user}
-                  onUpdated={() => void refreshSelectedTicket()}
-                />
-
-                {(user.role === "master" || user.role === "department_head") &&
-                  selectedTicket.status === "open" &&
-                  !(selectedTicket as TicketWithAssignment).assignedEmployeeId && (
-                  <section
-                    className="space-y-4 border-t pt-5"
-                    style={{ borderColor: "var(--color-border)" }}
-                  >
-                    <div>
-                      <h3
-                        className="text-sm font-semibold"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        Ticket assignment
-                      </h3>
-                      <p
-                        className="mt-1 text-sm"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        {user.role === "master"
-                          ? "Assign this ticket to an active employee."
-                          : "Assign this ticket to an active employee in your department."}
-                      </p>
-                    </div>
-
-                    <div
-                      className="rounded-lg border p-3"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        backgroundColor: "var(--color-bg)",
-                      }}
-                    >
-                      <p
-                        className="text-xs"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        Currently assigned to
-                      </p>
-                      <p
-                        className="mt-1 text-sm font-medium"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {(() => {
-                          const assignedId = (
-                            selectedTicket as TicketWithAssignment
-                          ).assignedEmployeeId;
-                          const assignedEmployee = assignableEmployees.find(
-                            (employee) => employee.id === assignedId,
-                          );
-                          return assignedEmployee
-                            ? `${assignedEmployee.fullName} (${assignedEmployee.employeeId})`
-                            : assignedId
-                              ? `Employee database ID ${assignedId}`
-                              : "Not assigned";
-                        })()}
-                      </p>
-                    </div>
-
-                    {assignmentError && (
-                      <p
-                        role="alert"
-                        className="text-sm"
-                        style={{ color: "var(--color-danger-text)" }}
-                      >
-                        {assignmentError}
-                      </p>
-                    )}
-
-                    <div className="flex flex-col gap-3 sm:flex-row">
-                      <select
-                        value={assignmentEmployeeId}
-                        onChange={(event) => {
-                          setAssignmentEmployeeId(event.target.value);
-                          setAssignmentError("");
-                        }}
-                        disabled={loadingEmployees || savingAssignment}
-                        aria-label="Choose employee to assign ticket"
-                        className="min-w-0 flex-1 rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)] disabled:opacity-60"
-                        style={{
-                          backgroundColor: "var(--color-bg)",
-                          borderColor: "var(--color-border)",
-                          color: "var(--color-text)",
-                        }}
-                      >
-                        <option value="">
-                          {loadingEmployees
-                            ? "Loading employees..."
-                            : "Select an employee"}
-                        </option>
-                        {assignableEmployees.map((employee) => (
-                          <option key={employee.id} value={employee.id}>
-                            {employee.fullName} ({employee.employeeId}) —{" "}
-                            {employee.role.replaceAll("_", " ")}
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleAssignTicket()}
-                        disabled={
-                          !assignmentEmployeeId ||
-                          savingAssignment ||
-                          loadingEmployees
-                        }
-                        className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                        style={{ backgroundColor: "var(--color-accent)" }}
-                      >
-                        {savingAssignment ? "Assigning..." : "Assign ticket"}
-                      </button>
-                    </div>
-
-                    {!loadingEmployees && assignableEmployees.length === 0 && (
-                      <p
-                        className="text-sm"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        No active employees are available to assign.
-                      </p>
-                    )}
-                  </section>
-                )}
-              </section>
-            ) : showCreateForm ? (
-              <CreateTicketForm
-                onSuccess={handleTicketCreated}
-                onCancel={() => setShowCreateForm(false)}
-              />
-            ) : (
-              <>
-                <section className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h2
-                      className="text-2xl font-semibold tracking-tight"
-                      style={{ color: "var(--color-text)" }}
-                    >
-                      {user.role === "employee"
-                        ? "My tickets"
-                        : user.role === "department_head"
-                          ? "Department tickets"
-                          : "All tickets"}
-                    </h2>
-                    <p
-                      className="mt-1 text-sm"
-                      style={{ color: "var(--color-text-secondary)" }}
-                    >
-                      Search, filter, and track support requests.
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void loadTickets()}
-                      disabled={loadingTickets}
-                      className="rounded-lg border px-4 py-2.5 text-sm font-medium transition hover:opacity-80 disabled:opacity-50"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        color: "var(--color-text)",
-                      }}
-                    >
-                      ↻ Refresh
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSuccessMessage("");
-                        setShowCreateForm(true);
-                      }}
-                      className="rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                      style={{ backgroundColor: "var(--color-accent)" }}
-                    >
-                      + Create ticket
-                    </button>
-                  </div>
-                </section>
-
-                {successMessage && (
-                  <div
-                    role="status"
-                    className="rounded-lg border px-4 py-3 text-sm"
-                    style={{
-                      backgroundColor: "var(--color-success-bg)",
-                      borderColor: "var(--color-border)",
-                      color: "var(--color-success-text)",
-                    }}
-                  >
-                    {successMessage}
-                  </div>
-                )}
-
-                <section
-                  className="rounded-2xl border p-4 transition-colors sm:p-5"
-                  style={{
-                    backgroundColor: "var(--color-surface)",
-                    borderColor: "var(--color-border)",
-                  }}
-                >
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_210px]">
-                    <div className="relative min-w-0">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        className="absolute left-3 top-1/2 size-4 -translate-y-1/2"
-                        style={{ color: "var(--color-text-secondary)" }}
-                        aria-hidden="true"
-                      >
-                        <circle
-                          cx="10.8"
-                          cy="10.8"
-                          r="6.8"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                        />
-                        <path
-                          d="m16 16 4.2 4.2"
-                          stroke="currentColor"
-                          strokeWidth="1.7"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-
-                      <input
-                        type="search"
-                        value={searchQuery}
-                        onChange={(event) => setSearchQuery(event.target.value)}
-                        placeholder="Search tickets, IDs, departments..."
-                        aria-label="Search tickets"
-                        className="w-full rounded-lg border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/20"
-                        style={{
-                          backgroundColor: "var(--color-bg)",
-                          borderColor: "var(--color-border)",
-                          color: "var(--color-text)",
-                        }}
-                      />
-                    </div>
-
-                    <select
-                      value={statusFilter}
-                      onChange={(event) => setStatusFilter(event.target.value)}
-                      aria-label="Filter tickets by status"
-                      className="w-full rounded-lg border px-3 py-2.5 text-sm outline-none focus:border-[var(--color-accent)]"
-                      style={{
-                        backgroundColor: "transparent",
-                        borderColor: "var(--color-border)",
-                        color: "var(--color-text)",
-                      }}
-                    >
-                      <option value="all">All statuses</option>
-                      {statusOptions.map((status) => (
-                        <option key={status.value} value={status.value}>
-                          {status.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                    <p
-                      className="text-sm"
-                      style={{ color: "var(--color-text-secondary)" }}
-                    >
-                      Showing{" "}
-                      <span
-                        className="font-semibold"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {filteredTickets.length}
-                      </span>{" "}
-                      of {tickets.length}{" "}
-                      {tickets.length === 1 ? "ticket" : "tickets"}
-                    </p>
-
-                    {(searchQuery || statusFilter !== "all") && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearchQuery("");
-                          setStatusFilter("all");
-                        }}
-                        className="text-sm font-medium"
-                        style={{ color: "var(--color-accent)" }}
-                      >
-                        Clear filters
-                      </button>
-                    )}
-                  </div>
-                </section>
-
-                {renderTicketCards(filteredTickets)}
-              </>
-            )}
-          </div>
-        );
+      case "transfers":
+        return <TicketTransfersPage user={user} />;
 
       case "employees":
-        return user.role === "master" ? (
-          <EmployeesPage />
-        ) : (
-          <section
-            role="alert"
-            className="rounded-xl border p-6 sm:p-8"
-            style={{
-              backgroundColor: "var(--color-surface)",
-              borderColor: "var(--color-border)",
-              color: "var(--color-text-secondary)",
-            }}
-          >
-            You do not have permission to access employee management.
-          </section>
-        );
-     case 'transfers':
-  return (
-    <TicketTransfersPage
-      user={user}
-      initialTicketId={selectedTicket?.id ?? null}
-    />
-  ) ;
+        return <EmployeesPage />;
+
       case "departments":
         return <DepartmentsPage />;
 
       default:
-        return (
-          <div className="space-y-5">
-            <section>
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.18em]" style={{ color: "var(--color-text-secondary)" }}>
-                Dashboard / Overview
-              </p>
-              <h2
-                className="text-2xl font-semibold tracking-tight sm:text-3xl"
-                style={{ color: "var(--color-text)" }}
-              >
-                Welcome back, {user.name}!
-              </h2>
-              <p
-                className="mt-1.5 text-sm"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                Here's what's happening with your support tickets today.
-              </p>
-            </section>
-
-            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                {
-                  label: "All tickets",
-                  value: tickets.length,
-                  detail: "Visible to your account",
-                },
-                {
-                  label: "Open",
-                  value: openCount,
-                  detail: "Awaiting action",
-                },
-                {
-                  label: "In progress",
-                  value: inProgressCount,
-                  detail: "Being worked on",
-                },
-                {
-                  label: "Resolved",
-                  value: resolvedCount,
-                  detail: "Marked resolved",
-                },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="rounded-xl border p-4 sm:p-5"
-                  style={{
-                    backgroundColor: "var(--color-surface)",
-                    borderColor: "var(--color-border)",
-                  }}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                      {stat.label}
-                    </p>
-                    <span className="size-2 rounded-full" style={{ backgroundColor: "var(--color-accent)" }} />
-                  </div>
-                  <p
-                    className="mt-2 text-3xl font-semibold tracking-tight"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    {loadingTickets ? "—" : stat.value}
-                  </p>
-                  <p
-                    className="mt-1 text-xs"
-                    style={{ color: "var(--color-text-secondary)" }}
-                  >
-                    {stat.detail}
-                  </p>
-                </div>
-              ))}
-            </section>
-
-            <section
-              className="flex flex-col gap-4 rounded-xl border p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-              style={{
-                backgroundColor: "var(--color-surface)",
-                borderColor: "var(--color-border)",
-              }}
-            >
-              <div>
-                <h3
-                  className="text-lg font-semibold"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  Need help with something?
-                </h3>
-                <p
-                  className="mt-1 text-sm leading-6"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  Create a support request or view your existing tickets.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSuccessMessage("");
-                    setActivePage("tickets");
-                    setShowCreateForm(true);
-                  }}
-                  className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-                  style={{ backgroundColor: "var(--color-accent)" }}
-                >
-                  + Create ticket
-                </button>
-
-                <button
-                  type="button"
-                  onClick={openTickets}
-                  className="rounded-lg border px-5 py-2.5 text-sm font-semibold transition hover:opacity-80"
-                  style={{
-                    borderColor: "var(--color-border)",
-                    color: "var(--color-text)",
-                  }}
-                >
-                  View tickets
-                </button>
-              </div>
-            </section>
-
-            <section className="min-w-0" aria-labelledby="my-activities-heading">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b pb-4" style={{ borderColor: "var(--color-border)" }}>
-                <div>
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--color-accent)" }}>
-                    YOUR WORKSPACE
-                  </p>
-                  <h3 id="my-activities-heading" className="text-lg font-semibold tracking-tight" style={{ color: "var(--color-text)" }}>
-                    My activities
-                  </h3>
-                  <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                    A quick look at your latest support tickets.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={openTickets}
-                  className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold transition hover:bg-white/[0.05]"
-                  style={{ color: "var(--color-accent)" }}
-                >
-                  View all <span aria-hidden="true">↗</span>
-                </button>
-              </div>
-
-              {loadingTickets ? (
-                <p className="py-6 text-sm" style={{ color: "var(--color-text-secondary)" }}>Loading recent tickets...</p>
-              ) : ticketError ? (
-                <div className="py-4">
-                  <p role="alert" className="text-sm" style={{ color: "var(--color-danger-text)" }}>{ticketError}</p>
-                  <button type="button" onClick={() => void loadTickets()} className="mt-3 text-sm font-semibold" style={{ color: "var(--color-accent)" }}>Try again</button>
-                </div>
-              ) : tickets.length === 0 ? (
-                <div className="flex items-center gap-3 py-8">
-                  <span className="flex size-10 items-center justify-center rounded-full border text-lg" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }} aria-hidden="true">＋</span>
-                  <div>
-                    <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>Nothing here yet</p>
-                    <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>Your recent support tickets will show up here.</p>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  {tickets.slice(0, 4).map((ticket, index) => (
-                    <button
-                      key={ticket.id}
-                      type="button"
-                      onClick={() => openTicketDetails(ticket)}
-                      className="group grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 border-b py-4 text-left transition-colors last:border-b-0 hover:bg-white/[0.025] sm:grid-cols-[40px_minmax(0,1fr)_auto] sm:gap-4"
-                      style={{ borderColor: "var(--color-border)" }}
-                    >
-                      <span
-                        className="flex size-9 items-center justify-center rounded-full text-xs font-bold ring-1 ring-inset transition-colors sm:size-10"
-                        style={{
-                          backgroundColor: "var(--color-accent-soft)",
-                          color: "var(--color-accent)",
-                          boxShadow: index === 0 ? "0 0 0 3px rgba(59,130,246,0.06)" : "none",
-                        }}
-                        aria-hidden="true"
-                      >
-                        {String(ticket.title || "T").trim().charAt(0).toUpperCase()}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="text-[11px] font-semibold tracking-wide" style={{ color: "var(--color-accent)" }}>{ticket.ticketCode}</span>
-                          <span className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>· {formatDate(ticket.createdAt)}</span>
-                        </span>
-                        <span className="mt-1 block truncate text-sm font-semibold transition-colors group-hover:text-white" style={{ color: "var(--color-text)" }}>{ticket.title}</span>
-                        <span className="mt-1 block truncate text-xs" style={{ color: "var(--color-text-secondary)" }}>{ticket.departmentName || "Unassigned department"}</span>
-                      </span>
-                      <span className="flex items-center gap-2 pl-1">
-                        <StatusBadge status={ticket.status} />
-                        <span className="hidden text-base opacity-0 transition-opacity group-hover:opacity-70 sm:inline" style={{ color: "var(--color-text-secondary)" }} aria-hidden="true">→</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        );
+        return null;
     }
   }
 
   return (
-    <div
-      className="min-h-screen md:flex"
-      style={{
-        backgroundColor: "var(--color-bg)",
-        color: "var(--color-text)",
-      }}
-    >
+    <div className="min-h-screen bg-(--color-bg) text-(--color-text) md:flex">
       <Sidebar
         role={user.role}
         activePage={activePage}
@@ -1347,9 +1576,9 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
       />
 
       <div className="min-w-0 flex-1">
-        <Topbar user={user} title={pageTitles[activePage] ?? "Overview"} />
+        <Topbar user={user} title={pageTitles[activePage] ?? "Overview"}  />
 
-        <main className="mx-auto w-full max-w-[1600px] space-y-5 p-4 sm:p-6 xl:p-8">
+        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:p-8">
           {renderContent()}
         </main>
       </div>

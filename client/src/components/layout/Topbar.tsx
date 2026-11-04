@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import type { LoggedInUser } from '../../types/auth'
 
 interface TopbarProps {
@@ -10,7 +11,16 @@ interface TopbarProps {
 
 type Theme = 'light' | 'dark'
 
-export default function Topbar({ user,  title }: TopbarProps) {
+const focusRing =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-accent)'
+
+const iconButton = `flex size-10 shrink-0 items-center justify-center rounded-full border border-(--color-border) bg-(--color-surface) text-(--color-text-secondary) transition hover:bg-white/[0.04] hover:text-(--color-text) ${focusRing}`
+
+export default function Topbar({
+  user,
+  title,
+  departmentName,
+}: TopbarProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       return localStorage.getItem('helpdesk-theme') === 'dark'
@@ -42,12 +52,12 @@ export default function Topbar({ user,  title }: TopbarProps) {
       .join('') || '?'
 
   const roleName = user.role.replace(/_/g, ' ')
+  const nextTheme = theme === 'light' ? 'dark' : 'light'
 
-  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+  function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     if (!search.trim()) return
-
 
     console.log('Helpdesk search:', search.trim())
   }
@@ -57,28 +67,16 @@ export default function Topbar({ user,  title }: TopbarProps) {
   }
 
   return (
-    <header
-      className="sticky top-0 z-30 w-full border-b transition-colors duration-200"
-      style={{
-        backgroundColor: 'var(--color-surface)',
-        borderColor: 'var(--color-border)',
-        color: 'var(--color-text)',
-      }}
-    >
-      {/* Main top bar */}
-      <div className="flex min-h-19 items-center gap-3 px-3 py-3 sm:gap-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 w-full border-b border-(--color-border) bg-(--color-surface) text-(--color-text) transition-colors duration-200">
+      <div className="flex h-16 items-center gap-3 px-3 sm:gap-4 sm:px-6 xl:px-8">
+
         {/* Mobile menu button */}
         <button
           type="button"
           onClick={openMobileSidebar}
           aria-label="Open navigation menu"
           title="Open navigation menu"
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl border transition hover:opacity-75 md:hidden"
-          style={{
-            backgroundColor: 'var(--color-surface-secondary)',
-            borderColor: 'var(--color-border)',
-            color: 'var(--color-text)',
-          }}
+          className={`${iconButton} md:hidden`}
         >
           <svg
             viewBox="0 0 24 24"
@@ -95,21 +93,13 @@ export default function Topbar({ user,  title }: TopbarProps) {
           </svg>
         </button>
 
-        {/* Brand */}
-        <div className="flex min-w-0 shrink-0 items-center gap-3">
+        {/* Brand and page title */}
+        <div className="flex min-w-0 shrink items-center gap-3">
           <div
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-            style={{
-              backgroundColor: 'var(--color-accent-soft)',
-              color: 'var(--color-accent-text)',
-            }}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-(--color-accent) text-white"
+            aria-hidden="true"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="size-6"
-              aria-hidden="true"
-            >
+            <svg viewBox="0 0 24 24" fill="none" className="size-5">
               <path
                 d="M12 3.5 20 7.5V12.5C20 17 16.6 20 12 21C7.4 20 4 17 4 12.5V7.5L12 3.5Z"
                 stroke="currentColor"
@@ -126,87 +116,72 @@ export default function Topbar({ user,  title }: TopbarProps) {
             </svg>
           </div>
 
-          <div className="min-w-0">
-            <p
-              className="truncate text-sm font-bold tracking-tight sm:text-base"
-              style={{ color: 'var(--color-text)' }}
-            >
-              Helpdesk
-            </p>
-            <p
-              className="hidden text-xs sm:block"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              Employee Support Portal
-            </p>
-          </div>
+          <p className="hidden text-base font-bold tracking-tight sm:block">
+            Helpdesk
+          </p>
+
+          <span
+            className="hidden h-5 w-px bg-(--color-border) sm:block"
+            aria-hidden="true"
+          />
+
+          <h1 className="truncate text-sm font-semibold text-(--color-text-secondary) sm:text-base">
+            {title}
+          </h1>
         </div>
 
         {/* Search */}
         <form
           onSubmit={handleSearch}
           role="search"
-          className="mx-auto hidden w-full max-w-md md:block"
+          className="mx-auto hidden w-full max-w-md lg:block"
         >
-          <div
-            className="flex h-10 items-center gap-2.5 rounded-xl border px-3 transition-colors"
-            style={{
-              backgroundColor: 'var(--color-surface-secondary)',
-              borderColor: 'var(--color-border)',
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="size-4.5 shrink-0"
-              style={{ color: 'var(--color-text-secondary)' }}
-              aria-hidden="true"
-            >
-              <circle
-                cx="10.8"
-                cy="10.8"
-                r="6.8"
-                stroke="currentColor"
-                strokeWidth="1.7"
-              />
-              <path
-                d="m16 16 4 4"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
+          <label className="relative block">
+            <span className="sr-only">Search helpdesk</span>
+
+            <span className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-(--color-text-secondary)">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="size-4"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="10.8"
+                  cy="10.8"
+                  r="6.8"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <path
+                  d="m16 16 4 4"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
 
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search tickets, IDs..."
-              aria-label="Search helpdesk"
-              className="w-full min-w-0 border-0 bg-transparent text-sm outline-none"
-              style={{ color: 'var(--color-text)' }}
+              placeholder="Search tickets or IDs"
+              className="h-10 w-full rounded-full border border-(--color-border) bg-(--color-bg) pr-4 pl-10 text-sm text-(--color-text) outline-none transition placeholder:text-(--color-text-secondary) focus:border-(--color-accent)"
             />
-          </div>
+          </label>
         </form>
 
         {/* Actions */}
         <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+
           {/* Theme toggle */}
           <button
             type="button"
-            onClick={() =>
-              setTheme((current) =>
-                current === 'light' ? 'dark' : 'light',
-              )
-            }
-            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-            title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}
-            className="flex size-10 items-center justify-center rounded-xl border transition hover:opacity-75"
-            style={{
-              backgroundColor: 'var(--color-surface-secondary)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text)',
-            }}
+            onClick={() => setTheme(nextTheme)}
+            aria-label={`Switch to ${nextTheme} theme`}
+            title={`Switch to ${nextTheme} theme`}
+            className={iconButton}
           >
             {theme === 'light' ? (
               <svg
@@ -252,12 +227,7 @@ export default function Topbar({ user,  title }: TopbarProps) {
             type="button"
             aria-label="Notifications"
             title="Notifications"
-            className="relative flex size-10 items-center justify-center rounded-xl border transition hover:opacity-75"
-            style={{
-              backgroundColor: 'var(--color-surface)',
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text-secondary)',
-            }}
+            className={iconButton}
           >
             <svg
               viewBox="0 0 24 24"
@@ -281,121 +251,31 @@ export default function Topbar({ user,  title }: TopbarProps) {
             </svg>
           </button>
 
-          <div
-            className="hidden h-9 w-px sm:block"
-            style={{ backgroundColor: 'var(--color-border)' }}
-          />
-
           {/* User profile */}
-          <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+          <div className="flex min-w-0 items-center gap-3 sm:pl-1">
             <div
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold"
-              style={{
-                backgroundColor: 'var(--color-accent-soft)',
-                color: 'var(--color-accent-text)',
-              }}
+              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-(--color-accent-soft) text-sm font-semibold text-(--color-accent-text)"
+              role="img"
               aria-label={`Profile for ${user.name}`}
             >
               {initials}
             </div>
 
-            <div className="hidden min-w-0 sm:block">
-              <p
-                className="max-w-36 truncate text-sm font-semibold"
-                style={{ color: 'var(--color-text)' }}
-              >
+            <div className="hidden min-w-0 md:block">
+              <p className="max-w-40 truncate text-sm font-semibold text-(--color-text)">
                 {user.name}
               </p>
-              <p
-                className="max-w-36 truncate text-xs capitalize"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
+
+              <p className="max-w-40 truncate text-xs capitalize text-(--color-text-secondary)">
                 {roleName}
+              </p>
+
+              <p className="max-w-40 truncate text-xs text-(--color-text-secondary)">
+                {departmentName || 'Department not assigned'}
               </p>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Breadcrumb */}
-      <div
-        className="flex min-h-10 items-center gap-2 border-t px-3 sm:px-6 lg:px-8"
-        style={{ borderColor: 'var(--color-border)' }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className="size-4 shrink-0"
-          style={{ color: 'var(--color-accent)' }}
-          aria-hidden="true"
-        >
-          <rect
-            x="3.5"
-            y="3.5"
-            width="7"
-            height="7"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-          <rect
-            x="13.5"
-            y="3.5"
-            width="7"
-            height="7"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-          <rect
-            x="3.5"
-            y="13.5"
-            width="7"
-            height="7"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-          <rect
-            x="13.5"
-            y="13.5"
-            width="7"
-            height="7"
-            rx="1.5"
-            stroke="currentColor"
-            strokeWidth="1.6"
-          />
-        </svg>
-
-        <span
-          className="truncate text-xs"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          Employee Helpdesk
-        </span>
-
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className="size-3.5 shrink-0"
-          style={{ color: 'var(--color-text-secondary)' }}
-          aria-hidden="true"
-        >
-          <path
-            d="m9 18 6-6-6-6"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-
-        <span
-          className="truncate text-xs font-semibold"
-          style={{ color: 'var(--color-text)' }}
-        >
-          {title}
-        </span>
       </div>
     </header>
   )

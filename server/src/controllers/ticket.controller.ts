@@ -233,13 +233,13 @@ export async function assignTicket(
 
     const employeeSql =
       user.role === 'department_head'
-        ? `SELECT id FROM users
+        ? `SELECT id, full_name AS fullName FROM users
            WHERE id = ?
              AND department_id = ?
              AND is_active = 1
              AND role = 'employee'
            LIMIT 1`
-        : `SELECT id FROM users
+        : `SELECT id, full_name AS fullName FROM users
            WHERE id = ?
              AND is_active = 1
              AND role IN ('employee', 'department_head')
@@ -289,7 +289,13 @@ export async function assignTicket(
        (ticket_id, actor_user_id, event_type, title, description,
         from_employee_id, to_employee_id, to_department_id)
        VALUES (?, ?, 'assigned', 'Ticket assigned', ?, NULL, ?, ?)`,
-      [ticketId, user.id, `Assigned to user ID ${employeeId}`, employeeId, ticket.departmentId],
+      [
+  ticketId,
+  user.id,
+  `Assigned to ${employees[0].fullName}`,
+  employeeId,
+  ticket.departmentId,
+],
     )
 
     res.status(200).json({

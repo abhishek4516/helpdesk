@@ -93,9 +93,9 @@ export default function Topbar({
           </svg>
         </button>
 
-        {/* Brand and page title */}
+      
         <div className="flex min-w-0 shrink items-center gap-3">
-          <div
+          {/* <div
             className="flex size-9 shrink-0 items-center justify-center rounded-full bg-(--color-accent) text-white"
             aria-hidden="true"
           >
@@ -114,11 +114,11 @@ export default function Topbar({
                 strokeLinejoin="round"
               />
             </svg>
-          </div>
-
-          <p className="hidden text-base font-bold tracking-tight sm:block">
+          </div> */}
+<h1> / </h1>
+          {/* <p className="hidden text-base font-bold tracking-tight sm:block">
             Helpdesk
-          </p>
+          </p> */}
 
           <span
             className="hidden h-5 w-px bg-(--color-border) sm:block"

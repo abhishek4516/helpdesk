@@ -18,11 +18,21 @@ async function login(req, res) {
     }
     try {
         const { identifier, password } = parsed.data;
-        const users = await (0, db_js_1.query)(`SELECT id, employee_id, email, full_name, password_hash,
-              role, department_id, is_active, must_change_password
-       FROM users
-       WHERE employee_id = ? OR email = ?
-       LIMIT 1`, [identifier, identifier]);
+        const users = await (0, db_js_1.query)(`SELECT
+      u.id,
+      u.employee_id,
+      u.email,
+      u.full_name,
+      u.password_hash,
+      u.role,
+      u.department_id,
+      d.name AS department_name,
+      u.is_active,
+      u.must_change_password
+   FROM users u
+   LEFT JOIN departments d ON d.id = u.department_id
+   WHERE u.employee_id = ? OR u.email = ?
+   LIMIT 1`, [identifier, identifier]);
         const user = users[0];
         if (!user || !user.is_active) {
             return res.status(401).json({
@@ -58,6 +68,7 @@ async function login(req, res) {
                 name: user.full_name,
                 role: user.role,
                 departmentId: user.department_id,
+                departmentName: user.department_name,
                 mustChangePassword: Boolean(user.must_change_password),
             },
         });

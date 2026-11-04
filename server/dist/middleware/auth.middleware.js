@@ -12,10 +12,18 @@ async function requireAuth(req, res, next) {
         });
     }
     try {
-        const users = await (0, db_js_1.query)(`SELECT u.id, u.employee_id, u.full_name, u.role,
-              u.department_id, u.is_active, u.must_change_password
+        const users = await (0, db_js_1.query)(`SELECT
+          u.id,
+          u.employee_id,
+          u.full_name,
+          u.role,
+          u.department_id,
+          d.name AS department_name,
+          u.is_active,
+          u.must_change_password
        FROM user_sessions s
        INNER JOIN users u ON u.id = s.user_id
+       LEFT JOIN departments d ON d.id = u.department_id
        WHERE s.session_token_hash = ?
          AND s.expires_at > UTC_TIMESTAMP()
        LIMIT 1`, [(0, session_js_1.hashSessionToken)(token)]);
@@ -38,6 +46,7 @@ async function requireAuth(req, res, next) {
             name: user.full_name,
             role: user.role,
             departmentId: user.department_id,
+            departmentName: user.department_name,
             mustChangePassword: Boolean(user.must_change_password),
         };
         return next();

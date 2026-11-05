@@ -36,7 +36,7 @@ async function createTicket(req, res) {
             });
             return;
         }
-        const { title, description, departmentId, priority } = validation.data;
+        const { title, description, departmentId } = validation.data;
         const user = req.user;
         if (!user) {
             res.status(401).json({ success: false, message: 'Please log in to create a ticket.' });
@@ -50,11 +50,8 @@ async function createTicket(req, res) {
         }
         const ticketCode = `HD-${(0, node_crypto_1.randomBytes)(6).toString('hex').toUpperCase()}`;
         const [result] = await database_js_1.pool.execute(`INSERT INTO tickets
-       (ticket_code, title, description, priority, requester_user_id, department_id, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'open')`, [ticketCode, title, description, priority, user.id, departmentId]);
-        await database_js_1.pool.execute(`INSERT INTO ticket_activities
-       (ticket_id, actor_user_id, event_type, title, description, to_department_id, metadata)
-       VALUES (?, ?, 'created', 'Ticket created', ?, ?, JSON_OBJECT('priority', ?))`, [result.insertId, user.id, title, departmentId, priority]);
+       (ticket_code, title, description, requester_user_id, department_id, status)
+       VALUES (?, ?, ?, ?, ?, 'open')`, [ticketCode, title, description, user.id, departmentId]);
         res.status(201).json({
             success: true,
             message: 'Ticket created successfully.',
@@ -64,7 +61,6 @@ async function createTicket(req, res) {
                 title,
                 description,
                 status: 'open',
-                priority,
                 departmentId,
                 departmentName: departments[0].name,
                 requesterUserId: user.id,
@@ -90,17 +86,22 @@ async function getTickets(req, res) {
         t.title,
         t.description,
         t.status,
-        t.priority,
         t.department_id AS departmentId,
         d.name AS departmentName,
         t.requester_user_id AS requesterUserId,
         u.full_name AS requesterName,
+        requesterDepartment.name AS requesterDepartmentName,
         t.assigned_employee_id AS assignedEmployeeId,
+        assignee.full_name AS assignedEmployeeName,
         t.created_at AS createdAt,
         t.updated_at AS updatedAt
       FROM tickets t
       INNER JOIN departments d ON d.id = t.department_id
       INNER JOIN users u ON u.id = t.requester_user_id
+      LEFT JOIN departments requesterDepartment
+        ON requesterDepartment.id = u.department_id
+      LEFT JOIN users assignee
+        ON assignee.id = t.assigned_employee_id
     `;
         const params = [];
         if (user.role === 'master') {
@@ -198,29 +199,35 @@ async function assignTicket(req, res) {
             });
             return;
         }
-        const [result] = await database_js_1.pool.execute(`UPDATE tickets
-       SET assigned_employee_id = ?,
-           status = 'assigned'
-       WHERE id = ?
-         AND status = 'open'
-         AND assigned_employee_id IS NULL`, [employeeId, ticketId]);
-        if (result.affectedRows === 0) {
-            res.status(409).json({
-                success: false,
-                message: 'This ticket has already been assigned or its status changed.',
-            });
-            return;
+        const connection = await database_js_1.pool.getConnection();
+        try {
+            await connection.beginTransaction();
+            const [result] = await connection.execute(`UPDATE tickets
+         SET assigned_employee_id = ?,
+             status = 'assigned'
+         WHERE id = ?
+           AND status = 'open'
+           AND assigned_employee_id IS NULL`, [employeeId, ticketId]);
+            if (result.affectedRows === 0) {
+                await connection.rollback();
+                res.status(409).json({
+                    success: false,
+                    message: 'This ticket has already been assigned or its status changed.',
+                });
+                return;
+            }
+            await connection.execute(`INSERT INTO ticket_activities
+           (ticket_id, actor_user_id, event_type, title, description, to_employee_id)
+         VALUES (?, ?, 'assigned', 'Ticket assigned', ?, ?)`, [ticketId, user.id, `Assigned to ${employees[0].fullName}`, employeeId]);
+            await connection.commit();
         }
-        await database_js_1.pool.execute(`INSERT INTO ticket_activities
-       (ticket_id, actor_user_id, event_type, title, description,
-        from_employee_id, to_employee_id, to_department_id)
-       VALUES (?, ?, 'assigned', 'Ticket assigned', ?, NULL, ?, ?)`, [
-            ticketId,
-            user.id,
-            `Assigned to ${employees[0].fullName}`,
-            employeeId,
-            ticket.departmentId,
-        ]);
+        catch (error) {
+            await connection.rollback();
+            throw error;
+        }
+        finally {
+            connection.release();
+        }
         res.status(200).json({
             success: true,
             message: 'Ticket assigned successfully.',
@@ -259,7 +266,6 @@ async function getTicketLifecycle(req, res) {
          t.title,
          t.description,
          t.status,
-         t.priority,
          t.created_at AS createdAt,
          t.updated_at AS updatedAt,
          t.requester_user_id AS requesterUserId,
@@ -306,6 +312,22 @@ async function getTicketLifecycle(req, res) {
             });
             return;
         }
+        // Fetch durable comments, resolution, and other workflow activity events.
+        const [activityRows] = await database_js_1.pool.execute(`SELECT
+         a.id,
+         a.event_type AS eventType,
+         a.title,
+         a.description,
+         a.created_at AS timestamp,
+         actor.full_name AS actorName,
+         actor.role AS actorRole,
+         target.full_name AS toEmployeeName
+       FROM ticket_activities a
+       LEFT JOIN users actor ON actor.id = a.actor_user_id
+       LEFT JOIN users target ON target.id = a.to_employee_id
+       WHERE a.ticket_id = ?
+         AND a.event_type NOT IN ('created', 'transfer_requested', 'transfer_reviewed')
+       ORDER BY a.created_at ASC, a.id ASC`, [ticketId]);
         // Fetch all transfer requests and their review details.
         const [transfers] = await database_js_1.pool.execute(`SELECT
          tr.id,
@@ -329,53 +351,8 @@ async function getTicketLifecycle(req, res) {
        LEFT JOIN users reviewer ON reviewer.id = tr.reviewed_by_user_id
        WHERE tr.ticket_id = ?
        ORDER BY tr.created_at ASC, tr.id ASC`, [ticketId]);
-        const [activityRows] = await database_js_1.pool.execute(`SELECT
-         a.id,
-         a.event_type AS type,
-         a.title,
-         a.description,
-         a.actor_user_id AS userId,
-         actor.full_name AS userName,
-         actor.role AS userRole,
-         a.from_department_id AS fromDepartmentId,
-         fromDepartment.name AS fromDepartmentName,
-         a.to_department_id AS toDepartmentId,
-         toDepartment.name AS toDepartmentName,
-         a.from_employee_id AS fromEmployeeId,
-         fromEmployee.full_name AS fromEmployeeName,
-         a.to_employee_id AS toEmployeeId,
-         toEmployee.full_name AS toEmployeeName,
-         a.metadata,
-         a.created_at AS timestamp
-       FROM ticket_activities a
-       LEFT JOIN users actor ON actor.id = a.actor_user_id
-       LEFT JOIN departments fromDepartment ON fromDepartment.id = a.from_department_id
-       LEFT JOIN departments toDepartment ON toDepartment.id = a.to_department_id
-       LEFT JOIN users fromEmployee ON fromEmployee.id = a.from_employee_id
-       LEFT JOIN users toEmployee ON toEmployee.id = a.to_employee_id
-       WHERE a.ticket_id = ?
-       ORDER BY a.created_at ASC, a.id ASC`, [ticketId]);
-        const events = activityRows.map((row) => ({
-            type: row.type,
-            title: row.title,
-            description: row.description,
-            userId: row.userId,
-            userName: row.userName,
-            userRole: row.userRole,
-            fromDepartmentId: row.fromDepartmentId,
-            fromDepartmentName: row.fromDepartmentName,
-            toDepartmentId: row.toDepartmentId,
-            toDepartmentName: row.toDepartmentName,
-            fromEmployeeId: row.fromEmployeeId,
-            fromEmployeeName: row.fromEmployeeName,
-            toEmployeeId: row.toEmployeeId,
-            toEmployeeName: row.toEmployeeName,
-            metadata: row.metadata,
-            timestamp: row.timestamp,
-        }));
-        // Fallback for legacy tickets that predate the activity migration.
-        if (events.length === 0) {
-            events.push({
+        const events = [
+            {
                 type: 'created',
                 title: 'Ticket created',
                 description: ticket.title,
@@ -383,6 +360,30 @@ async function getTicketLifecycle(req, res) {
                 userName: ticket.requesterName,
                 userRole: ticket.requesterRole,
                 timestamp: ticket.createdAt,
+            },
+        ];
+        const hasAssignmentActivity = activityRows.some((activity) => String(activity.eventType).toLowerCase() === 'assigned');
+        if (ticket.assignedEmployeeId !== null && !hasAssignmentActivity) {
+            events.push({
+                type: 'assigned',
+                title: 'Ticket assigned',
+                userId: ticket.assignedEmployeeId,
+                userName: ticket.assignedEmployeeName,
+                assignedEmployeeName: ticket.assignedEmployeeName,
+                timestamp: ticket.updatedAt,
+            });
+        }
+        for (const activity of activityRows) {
+            events.push({
+                id: activity.id,
+                type: activity.eventType,
+                eventType: activity.eventType,
+                title: activity.title,
+                description: activity.description,
+                actorName: activity.actorName,
+                actorRole: activity.actorRole,
+                toEmployeeName: activity.toEmployeeName,
+                timestamp: activity.timestamp,
             });
         }
         for (const transfer of transfers) {
@@ -415,8 +416,15 @@ async function getTicketLifecycle(req, res) {
                 });
             }
         }
-        events.sort((a, b) => new Date(a.timestamp).getTime() -
-            new Date(b.timestamp).getTime());
+        events.sort((a, b) => {
+            const timeDifference = new Date(a.timestamp).getTime() -
+                new Date(b.timestamp).getTime();
+            if (timeDifference !== 0)
+                return timeDifference;
+            const aId = Number(a.id ?? 0);
+            const bId = Number(b.id ?? 0);
+            return aId - bId;
+        });
         res.status(200).json({
             success: true,
             ticket,

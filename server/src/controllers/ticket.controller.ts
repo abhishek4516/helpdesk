@@ -8,8 +8,8 @@ interface DepartmentRow extends RowDataPacket {
   id: number
   name: string
   departmentCode: string
+  headUserId: number | null
 }
-
 interface TicketRow extends RowDataPacket {
   id: number
   ticketCode: string
@@ -71,8 +71,14 @@ export async function createTicket(
     }
 
     const [departments] = await pool.execute<DepartmentRow[]>(
-      `SELECT id, name, department_code AS departmentCode
-       FROM departments WHERE id = ? AND is_active = 1 LIMIT 1`,
+      `SELECT
+  id,
+  name,
+  department_code AS departmentCode,
+  head_user_id AS headUserId
+FROM departments
+WHERE id = ? AND is_active = 1
+LIMIT 1`,
       [departmentId],
     )
     if (departments.length === 0) {
@@ -87,7 +93,22 @@ export async function createTicket(
        VALUES (?, ?, ?, ?, ?, 'open')`,
       [ticketCode, title, description, user.id, departmentId],
     )
+const departmentHeadId = departments[0].headUserId
 
+if (departmentHeadId && departmentHeadId !== user.id) {
+  await pool.execute(
+    `INSERT INTO notifications
+      (recipient_user_id, ticket_id, notification_type, title, message)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      departmentHeadId,
+      result.insertId,
+      'ticket_created',
+      'New ticket received',
+      `${user.name} raised a new ticket: ${title}`,
+    ],
+  )
+}
     res.status(201).json({
       success: true,
       message: 'Ticket created successfully.',
@@ -147,13 +168,10 @@ export async function getTickets(
     const params: (string | number)[] = []
 
     if (user.role === 'master') {
-      // Master users can view all tickets.
     } else if (user.role === 'department_head') {
-      // Department heads can view all tickets in their department.
       sql += ' WHERE d.head_user_id = ?'
       params.push(user.id)
     } else {
-      // Employees can view tickets they created or tickets assigned to them.
       sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)'
       params.push(user.id, user.id)
     }
@@ -203,7 +221,12 @@ export async function assignTicket(
     }
 
     const [tickets] = await pool.execute<RowDataPacket[]>(
-      `SELECT t.id, t.department_id AS departmentId, t.status
+      `SELECT
+         t.id,
+         t.ticket_code AS ticketCode,
+         t.title,
+         t.department_id AS departmentId,
+         t.status
        FROM tickets t
        INNER JOIN departments d ON d.id = t.department_id
        WHERE t.id = ?
@@ -293,6 +316,22 @@ export async function assignTicket(
          VALUES (?, ?, 'assigned', 'Ticket assigned', ?, ?)`,
         [ticketId, user.id, `Assigned to ${employees[0].fullName}`, employeeId],
       )
+
+      if (employeeId !== Number(user.id)) {
+        await connection.execute(
+          `INSERT INTO notifications
+             (recipient_user_id, ticket_id, notification_type, title, message)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            employeeId,
+            ticketId,
+            'ticket_assigned',
+            'New ticket assigned',
+            `Ticket ${ticket.ticketCode}: ${ticket.title} has been assigned to you.`,
+          ],
+        )
+      }
+
       await connection.commit()
     } catch (error) {
       await connection.rollback()
@@ -338,8 +377,6 @@ export async function getTicketLifecycle(
       })
       return
     }
-
-    // Fetch the ticket and its creator.
     const [tickets] = await pool.execute<RowDataPacket[]>(
       `SELECT
          t.id,
@@ -374,8 +411,6 @@ export async function getTicketLifecycle(
     }
 
     const ticket = tickets[0]
-
-    // Apply the same basic visibility rules as getTickets.
     if (user.role === 'department_head') {
       const [visible] = await pool.execute<RowDataPacket[]>(
         `SELECT id
@@ -403,8 +438,6 @@ export async function getTicketLifecycle(
       })
       return
     }
-
-    // Fetch durable comments, resolution, and other workflow activity events.
     const [activityRows] = await pool.execute<RowDataPacket[]>(
       `SELECT
          a.id,
@@ -423,8 +456,6 @@ export async function getTicketLifecycle(
        ORDER BY a.created_at ASC, a.id ASC`,
       [ticketId],
     )
-
-    // Fetch all transfer requests and their review details.
     const [transfers] = await pool.execute<RowDataPacket[]>(
       `SELECT
          tr.id,

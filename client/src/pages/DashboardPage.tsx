@@ -701,6 +701,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   const [ticketError, setTicketError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [transferTicketId, setTransferTicketId] = useState<number | null>(null);
   const [lifecycleEvents, setLifecycleEvents] = useState<
     TicketLifecycleEvent[]
   >([]);
@@ -1691,7 +1692,10 @@ async function handleWorkflowAction(
 
                   <button
                     type="button"
-                    onClick={() => setActivePage("transfers")}
+                    onClick={() => {
+                      setTransferTicketId(selectedTicket.id);
+                      setActivePage("transfers");
+                    }}
                     className={`${primaryButton} w-full`}
                   >
                     Transfer ticket
@@ -2270,7 +2274,10 @@ async function handleWorkflowAction(
         return renderOverviewPage();
 
       case "transfers":
-        return <TicketTransfersPage user={user} />;
+        return <TicketTransfersPage
+  user={user}
+  initialTicketId={transferTicketId}
+/>;
 
       case "employees":
         return <EmployeesPage />;

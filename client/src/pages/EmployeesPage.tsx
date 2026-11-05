@@ -1,5 +1,4 @@
-
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type Role = 'master' | 'department_head' | 'employee'
 
@@ -37,39 +36,45 @@ const emptyForm: EmployeeForm = {
   departmentId: '',
 }
 
-const buttonStyle = {
+const buttonBase: React.CSSProperties = {
   border: '1px solid var(--color-border)',
-  borderRadius: '9px',
+  borderRadius: 10,
   padding: '9px 13px',
-  fontSize: '13px',
+  fontSize: 13,
   fontWeight: 600,
   cursor: 'pointer',
+  transition: 'background 150ms ease, border-color 150ms ease, opacity 150ms ease',
 }
 
-const inputStyle = {
+const inputBase: React.CSSProperties = {
   width: '100%',
-  padding: '10px 12px',
+  minWidth: 0,
+  padding: '11px 13px',
   border: '1px solid var(--color-border)',
-  borderRadius: '9px',
+  borderRadius: 10,
   background: 'var(--color-surface)',
   color: 'var(--color-text)',
-  fontSize: '14px',
+  fontSize: 13,
   outline: 'none',
-  boxSizing: 'border-box' as const,
+  boxSizing: 'border-box',
 }
 
-const labelStyle = {
+const labelBase: React.CSSProperties = {
   display: 'block',
-  marginBottom: '6px',
-  fontSize: '13px',
-  fontWeight: 600,
+  marginBottom: 7,
   color: 'var(--color-text)',
+  fontSize: 12,
+  fontWeight: 650,
 }
 
 function roleLabel(role: Role) {
   if (role === 'master') return 'Master'
   if (role === 'department_head') return 'Department Head'
   return 'Employee'
+}
+
+function isDepartmentActive(department: Department) {
+  return department.is_active === true || department.is_active === 1
 }
 
 export default function EmployeesPage() {
@@ -95,35 +100,24 @@ export default function EmployeesPage() {
 
     try {
       const [employeeResponse, departmentResponse] = await Promise.all([
-        fetch('http://localhost:5000/api/employees', {
-          credentials: 'include',
-        }),
-        fetch('http://localhost:5000/api/departments', {
-          credentials: 'include',
-        }),
+        fetch('http://localhost:5000/api/employees', { credentials: 'include' }),
+        fetch('http://localhost:5000/api/departments', { credentials: 'include' }),
       ])
 
       const employeeData = await employeeResponse.json()
       const departmentData = await departmentResponse.json()
 
       if (!employeeResponse.ok || !employeeData.success) {
-        throw new Error(
-          employeeData.message || 'Unable to load employees.',
-        )
+        throw new Error(employeeData.message || 'Unable to load employees.')
       }
-
       if (!departmentResponse.ok || !departmentData.success) {
-        throw new Error(
-          departmentData.message || 'Unable to load departments.',
-        )
+        throw new Error(departmentData.message || 'Unable to load departments.')
       }
 
       setEmployees(employeeData.employees)
       setDepartments(departmentData.departments)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unable to load data.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to load data.')
     } finally {
       setLoading(false)
     }
@@ -135,30 +129,30 @@ export default function EmployeesPage() {
 
   const getDepartmentName = (id: number | null) => {
     if (id === null) return 'No department'
-    return departments.find((department) => department.id === id)?.name
-      ?? 'Unknown department'
+    return departments.find((department) => department.id === id)?.name ?? 'Unknown department'
   }
 
-  const filteredEmployees = employees.filter((employee) => {
+  const filteredEmployees = useMemo(() => {
     const term = search.trim().toLowerCase()
+    return employees.filter((employee) => {
+      const matchesSearch =
+        !term ||
+        employee.name.toLowerCase().includes(term) ||
+        employee.employeeId.toLowerCase().includes(term) ||
+        (employee.email ?? '').toLowerCase().includes(term)
 
-    const matchesSearch =
-      !term ||
-      employee.name.toLowerCase().includes(term) ||
-      employee.employeeId.toLowerCase().includes(term) ||
-      (employee.email ?? '').toLowerCase().includes(term)
+      const matchesDepartment =
+        departmentFilter === 'all' ||
+        String(employee.departmentId ?? '') === departmentFilter
 
-    const matchesDepartment =
-      departmentFilter === 'all' ||
-      String(employee.departmentId ?? '') === departmentFilter
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && employee.isActive) ||
+        (statusFilter === 'inactive' && !employee.isActive)
 
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && employee.isActive) ||
-      (statusFilter === 'inactive' && !employee.isActive)
-
-    return matchesSearch && matchesDepartment && matchesStatus
-  })
+      return matchesSearch && matchesDepartment && matchesStatus
+    })
+  }, [employees, search, departmentFilter, statusFilter])
 
   const openCreateForm = () => {
     setEditingEmployee(null)
@@ -175,10 +169,7 @@ export default function EmployeesPage() {
       name: employee.name,
       email: employee.email ?? '',
       role: employee.role,
-      departmentId:
-        employee.departmentId === null
-          ? ''
-          : String(employee.departmentId),
+      departmentId: employee.departmentId === null ? '' : String(employee.departmentId),
     })
     setError('')
     setNotice('')
@@ -192,10 +183,7 @@ export default function EmployeesPage() {
     setForm(emptyForm)
   }
 
-  const updateField = <K extends keyof EmployeeForm>(
-    key: K,
-    value: EmployeeForm[K],
-  ) => {
+  const updateField = <K extends keyof EmployeeForm>(key: K, value: EmployeeForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }))
   }
 
@@ -210,13 +198,11 @@ export default function EmployeesPage() {
 
     try {
       const payload = {
-        employeeId: form.employeeId.trim(),
+        ...(editingEmployee ? { employeeId: form.employeeId.trim() } : {}),
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
-        departmentId: form.departmentId
-          ? Number(form.departmentId)
-          : null,
+        departmentId: form.departmentId ? Number(form.departmentId) : null,
       }
 
       const url = editingEmployee
@@ -229,7 +215,6 @@ export default function EmployeesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-
       const data = await response.json()
 
       if (!response.ok || !data.success) {
@@ -241,9 +226,7 @@ export default function EmployeesPage() {
       } else {
         setTemporaryPassword(data.temporaryPassword)
         setPasswordEmployeeId(data.employee.employeeId)
-        setPasswordMessage(
-          'Employee created. Copy the temporary password now and share it securely.',
-        )
+        setPasswordMessage('Employee created. Copy the temporary password now and share it securely.')
       }
 
       setShowForm(false)
@@ -251,60 +234,33 @@ export default function EmployeesPage() {
       setForm(emptyForm)
       await loadData()
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Unable to save employee.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to save employee.')
     } finally {
       setSaving(false)
     }
   }
 
   const handleDeactivate = async (employee: Employee) => {
-    if (
-      !window.confirm(
-        `Deactivate ${employee.name} (${employee.employeeId})? Their ticket history will be preserved.`,
-      )
-    ) {
-      return
-    }
+    if (!window.confirm(`Deactivate ${employee.name} (${employee.employeeId})? Their ticket history will be preserved.`)) return
 
     setError('')
     setNotice('')
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/employees/${employee.id}/deactivate`,
-        {
-          method: 'PATCH',
-          credentials: 'include',
-        },
-      )
-
+      const response = await fetch(`http://localhost:5000/api/employees/${employee.id}/deactivate`, {
+        method: 'PATCH',
+        credentials: 'include',
+      })
       const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Unable to deactivate employee.')
-      }
-
+      if (!response.ok || !data.success) throw new Error(data.message || 'Unable to deactivate employee.')
       setNotice(data.message)
       await loadData()
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to deactivate employee.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to deactivate employee.')
     }
   }
 
   const handleResetPassword = async (employee: Employee) => {
-    if (
-      !window.confirm(
-        `Generate a new temporary password for ${employee.name}? Their existing sessions will be invalidated.`,
-      )
-    ) {
-      return
-    }
+    if (!window.confirm(`Generate a new temporary password for ${employee.name}? Their existing sessions will be invalidated.`)) return
 
     setError('')
     setNotice('')
@@ -313,33 +269,19 @@ export default function EmployeesPage() {
     setPasswordMessage('')
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/employees/${employee.id}/reset-password`,
-        {
-          method: 'POST',
-          credentials: 'include',
-        },
-      )
-
+      const response = await fetch(`http://localhost:5000/api/employees/${employee.id}/reset-password`, {
+        method: 'POST',
+        credentials: 'include',
+      })
       const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Unable to reset password.')
-      }
+      if (!response.ok || !data.success) throw new Error(data.message || 'Unable to reset password.')
 
       setTemporaryPassword(data.temporaryPassword)
       setPasswordEmployeeId(data.employeeId)
-      setPasswordMessage(
-        'Temporary password generated. Copy it now and share it securely.',
-      )
-
+      setPasswordMessage('Temporary password generated. Copy it now and share it securely.')
       await loadData()
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to reset password.',
-      )
+      setError(err instanceof Error ? err.message : 'Unable to reset password.')
     }
   }
 
@@ -348,410 +290,142 @@ export default function EmployeesPage() {
       await navigator.clipboard.writeText(temporaryPassword)
       setNotice('Temporary password copied to clipboard.')
     } catch {
-      setError(
-        'Clipboard access failed. Select and copy the password manually.',
-      )
+      setError('Clipboard access failed. Select and copy the password manually.')
     }
   }
 
   const activeCount = employees.filter((employee) => employee.isActive).length
   const inactiveCount = employees.length - activeCount
+  const activeDepartments = departments.filter(isDepartmentActive)
+
+  const cardStyle: React.CSSProperties = {
+    border: '1px solid var(--color-border)',
+    borderRadius: 16,
+    background: 'var(--color-surface)',
+    boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+  }
+
+  const actionButton = (tone: 'default' | 'danger' = 'default'): React.CSSProperties => ({
+    ...buttonBase,
+    background: 'var(--color-surface)',
+    color: tone === 'danger' ? 'var(--color-danger-text)' : 'var(--color-text)',
+    borderColor: 'var(--color-border)',
+  })
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '24px',
-        color: 'var(--color-text)',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px',
-        }}
-      >
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20, color: 'var(--color-text)', minWidth: 0 }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
         <div>
-          <h1 style={{ fontSize: '25px', fontWeight: 700, margin: 0 }}>
-            Employee Management
-          </h1>
-          <p
-            style={{
-              margin: '7px 0 0',
-              color: 'var(--color-text-secondary)',
-              fontSize: '14px',
-            }}
-          >
-            Create accounts, manage employee details, and reset passwords.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', borderRadius: 12, background: 'var(--color-accent-soft, var(--color-surface-secondary))', color: 'var(--color-accent)', fontSize: 19 }}>♙</div>
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 750, letterSpacing: '-0.5px' }}>Employee Management</h1>
+          </div>
+          <p style={{ margin: '7px 0 0 48px', color: 'var(--color-text-secondary)', fontSize: 13 }}>Manage accounts, department access and employee credentials.</p>
         </div>
-
-        <button
-          type="button"
-          onClick={openCreateForm}
-          style={{
-            ...buttonStyle,
-            background: 'var(--color-accent)',
-            color: '#fff',
-            borderColor: 'var(--color-accent)',
-          }}
-        >
-          + Add Employee
+        <button type="button" onClick={openCreateForm} style={{ ...buttonBase, padding: '11px 16px', background: 'var(--color-accent)', color: '#fff', borderColor: 'var(--color-accent)', boxShadow: '0 5px 14px rgba(139,92,246,0.2)' }}>
+          + Add employee
         </button>
-      </div>
+      </header>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-          gap: '14px',
-        }}
-      >
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
         {[
-          { label: 'Total employees', value: employees.length },
-          { label: 'Active accounts', value: activeCount },
-          { label: 'Inactive accounts', value: inactiveCount },
+          { label: 'Total employees', value: employees.length, mark: '◎' },
+          { label: 'Active accounts', value: activeCount, mark: '✓' },
+          { label: 'Inactive accounts', value: inactiveCount, mark: 'Ⅱ' },
         ].map((stat) => (
-          <div
-            key={stat.label}
-            style={{
-              border: '1px solid var(--color-border)',
-              borderRadius: '13px',
-              padding: '18px',
-              background: 'var(--color-surface)',
-            }}
-          >
-            <p
-              style={{
-                margin: 0,
-                color: 'var(--color-text-secondary)',
-                fontSize: '13px',
-              }}
-            >
-              {stat.label}
-            </p>
-            <p
-              style={{
-                margin: '8px 0 0',
-                fontSize: '27px',
-                fontWeight: 700,
-              }}
-            >
-              {stat.value}
-            </p>
+          <div key={stat.label} style={{ ...cardStyle, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 13 }}>
+            <div style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', borderRadius: 12, background: 'var(--color-surface-secondary)', color: 'var(--color-accent)', fontSize: 18, fontWeight: 700 }}>{stat.mark}</div>
+            <div>
+              <div style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>{stat.label}</div>
+              <div style={{ marginTop: 3, fontSize: 25, lineHeight: 1.1, fontWeight: 750, fontVariantNumeric: 'tabular-nums' }}>{stat.value}</div>
+            </div>
           </div>
         ))}
-      </div>
+      </section>
 
-      {error && (
-        <div
-          role="alert"
-          style={{
-            padding: '13px 15px',
-            borderRadius: '10px',
-            background: 'var(--color-danger-bg, var(--color-surface-secondary))',
-            color: 'var(--color-danger-text)',
-            fontSize: '14px',
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {notice && (
-        <div
-          role="status"
-          style={{
-            padding: '13px 15px',
-            borderRadius: '10px',
-            background: 'var(--color-success-bg)',
-            color: 'var(--color-success-text)',
-            fontSize: '14px',
-          }}
-        >
-          {notice}
-        </div>
-      )}
+      {error && <div role="alert" style={{ padding: '12px 15px', borderRadius: 11, border: '1px solid var(--color-danger-text)', background: 'var(--color-danger-bg, var(--color-surface-secondary))', color: 'var(--color-danger-text)', fontSize: 13 }}>{error}</div>}
+      {notice && <div role="status" style={{ padding: '12px 15px', borderRadius: 11, border: '1px solid var(--color-success-text)', background: 'var(--color-success-bg)', color: 'var(--color-success-text)', fontSize: 13 }}>{notice}</div>}
 
       {temporaryPassword && (
-        <section
-          style={{
-            border: '1px solid var(--color-border)',
-            borderRadius: '13px',
-            padding: '18px',
-            background: 'var(--color-surface)',
-          }}
-        >
-          <h2 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: 700 }}>
-            Temporary password
-          </h2>
-          <p
-            style={{
-              margin: '0 0 14px',
-              color: 'var(--color-text-secondary)',
-              fontSize: '13px',
-            }}
-          >
-            {passwordMessage} Employee ID: {passwordEmployeeId}. This password
-            will not be shown again after you leave this page.
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: '10px',
-            }}
-          >
-            <code
-              style={{
-                padding: '11px 13px',
-                borderRadius: '8px',
-                border: '1px solid var(--color-border)',
-                background: 'var(--color-surface-secondary)',
-                fontSize: '15px',
-                overflowWrap: 'anywhere',
-                userSelect: 'all',
-              }}
-            >
-              {temporaryPassword}
-            </code>
-            <button
-              type="button"
-              onClick={copyTemporaryPassword}
-              style={{
-                ...buttonStyle,
-                background: 'var(--color-surface)',
-                color: 'var(--color-text)',
-              }}
-            >
-              Copy password
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTemporaryPassword('')
-                setPasswordEmployeeId('')
-                setPasswordMessage('')
-              }}
-              style={{
-                ...buttonStyle,
-                background: 'var(--color-surface)',
-                color: 'var(--color-text)',
-              }}
-            >
-              Dismiss
-            </button>
+        <section style={{ ...cardStyle, padding: 18, borderColor: 'var(--color-success-text)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <strong style={{ fontSize: 15 }}>Temporary password generated</strong>
+              <p style={{ margin: '5px 0 12px', color: 'var(--color-text-secondary)', fontSize: 12 }}>{passwordMessage} Employee ID: <strong>{passwordEmployeeId}</strong>. This password will not be shown again after you leave this page.</p>
+            </div>
+            <button type="button" onClick={() => { setTemporaryPassword(''); setPasswordEmployeeId(''); setPasswordMessage('') }} style={actionButton()}>Dismiss</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+            <code style={{ padding: '11px 14px', borderRadius: 9, border: '1px solid var(--color-border)', background: 'var(--color-surface-secondary)', color: 'var(--color-text)', fontSize: 14, userSelect: 'all' }}>{temporaryPassword}</code>
+            <button type="button" onClick={copyTemporaryPassword} style={{ ...buttonBase, background: 'var(--color-accent)', color: '#fff', borderColor: 'var(--color-accent)' }}>Copy password</button>
           </div>
         </section>
       )}
 
-      <section
-        style={{
-          border: '1px solid var(--color-border)',
-          borderRadius: '13px',
-          overflow: 'hidden',
-          background: 'var(--color-surface)',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '12px',
-            padding: '17px',
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
-          <input
-            aria-label="Search employees"
-            placeholder="Search name, Employee ID, or email..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            style={{ ...inputStyle, flex: '1 1 230px', width: 'auto' }}
-          />
+      <section style={{ ...cardStyle, overflow: 'hidden' }}>
+        <div style={{ padding: 15, borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <strong style={{ fontSize: 14 }}>Employee directory</strong>
+            <div style={{ marginTop: 3, color: 'var(--color-text-secondary)', fontSize: 12 }}>Search and manage employee accounts</div>
+          </div>
+          <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>{filteredEmployees.length} of {employees.length} records</span>
+        </div>
 
-          <select
-            aria-label="Filter by department"
-            value={departmentFilter}
-            onChange={(event) => setDepartmentFilter(event.target.value)}
-            style={{ ...inputStyle, flex: '0 1 190px', width: 'auto' }}
-          >
+        <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) repeat(2, minmax(150px, 190px)) auto', gap: 9, borderBottom: '1px solid var(--color-border)' }}>
+          <input aria-label="Search employees" placeholder="Search name, Employee ID or email..." value={search} onChange={(event) => setSearch(event.target.value)} style={inputBase} />
+          <select aria-label="Filter by department" value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} style={inputBase}>
             <option value="all">All departments</option>
-            {departments
-              .filter(
-                (department) =>
-                  department.is_active === true ||
-                  department.is_active === 1,
-              )
-              .map((department) => (
-                <option key={department.id} value={String(department.id)}>
-                  {department.name}
-                </option>
-              ))}
+            {activeDepartments.map((department) => <option key={department.id} value={String(department.id)}>{department.name}</option>)}
           </select>
-
-          <select
-            aria-label="Filter by account status"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
-            style={{ ...inputStyle, flex: '0 1 155px', width: 'auto' }}
-          >
+          <select aria-label="Filter by account status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} style={inputBase}>
             <option value="active">Active accounts</option>
             <option value="inactive">Inactive accounts</option>
             <option value="all">All accounts</option>
           </select>
-
-          <button
-            type="button"
-            onClick={() => void loadData()}
-            style={{
-              ...buttonStyle,
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-            }}
-          >
-            Refresh
-          </button>
+          <button type="button" onClick={() => void loadData()} disabled={loading} style={actionButton()}>{loading ? 'Loading…' : '↻ Refresh'}</button>
         </div>
 
         {loading ? (
-          <p style={{ padding: '25px', color: 'var(--color-text-secondary)' }}>
-            Loading employees...
-          </p>
+          <div style={{ padding: 34, textAlign: 'center', color: 'var(--color-text-secondary)', fontSize: 13 }}>Loading employee directory…</div>
         ) : filteredEmployees.length === 0 ? (
-          <p style={{ padding: '25px', color: 'var(--color-text-secondary)' }}>
-            No employees match your filters.
-          </p>
+          <div style={{ padding: 42, textAlign: 'center' }}>
+            <div style={{ fontSize: 25, color: 'var(--color-text-secondary)' }}>⌕</div>
+            <strong style={{ display: 'block', marginTop: 8, fontSize: 14 }}>No employees found</strong>
+            <span style={{ display: 'block', marginTop: 4, color: 'var(--color-text-secondary)', fontSize: 12 }}>Try changing your search or filters.</span>
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table
-              style={{
-                width: '100%',
-                borderCollapse: 'collapse',
-                textAlign: 'left',
-                fontSize: '13px',
-              }}
-            >
+            <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
               <thead>
-                <tr
-                  style={{
-                    background: 'var(--color-surface-secondary)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  {[
-                    'Employee',
-                    'Employee ID',
-                    'Department',
-                    'Role',
-                    'Status',
-                    'Actions',
-                  ].map((heading) => (
-                    <th
-                      key={heading}
-                      style={{
-                        padding: '13px 15px',
-                        fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {heading}
-                    </th>
-                  ))}
+                <tr style={{ background: 'var(--color-surface-secondary)', color: 'var(--color-text-secondary)' }}>
+                  {['Employee', 'Employee ID', 'Department', 'Role', 'Status', 'Actions'].map((heading) => <th key={heading} style={{ padding: '12px 15px', fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{heading}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {filteredEmployees.map((employee) => (
-                  <tr
-                    key={employee.id}
-                    style={{
-                      borderTop: '1px solid var(--color-border)',
-                      opacity: employee.isActive ? 1 : 0.72,
-                    }}
-                  >
-                    <td style={{ padding: '15px', minWidth: '190px' }}>
-                      <div style={{ fontWeight: 600 }}>{employee.name}</div>
-                      <div
-                        style={{
-                          marginTop: '4px',
-                          color: 'var(--color-text-secondary)',
-                        }}
-                      >
-                        {employee.email || 'No email'}
+                  <tr key={employee.id} style={{ borderTop: '1px solid var(--color-border)', opacity: employee.isActive ? 1 : 0.68 }}>
+                    <td style={{ padding: '13px 15px', minWidth: 210 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ width: 34, height: 34, flex: '0 0 34px', display: 'grid', placeItems: 'center', borderRadius: 11, background: 'var(--color-surface-secondary)', color: 'var(--color-accent)', fontWeight: 750 }}>{employee.name.trim().charAt(0).toUpperCase()}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 650, color: 'var(--color-text)' }}>{employee.name}</div>
+                          <div style={{ marginTop: 3, color: 'var(--color-text-secondary)', fontSize: 11 }}>{employee.email || 'No email added'}</div>
+                        </div>
                       </div>
                     </td>
-                    <td style={{ padding: '15px', whiteSpace: 'nowrap' }}>
-                      {employee.employeeId}
-                    </td>
-                    <td style={{ padding: '15px', whiteSpace: 'nowrap' }}>
-                      {getDepartmentName(employee.departmentId)}
-                    </td>
-                    <td style={{ padding: '15px', whiteSpace: 'nowrap' }}>
-                      {roleLabel(employee.role)}
-                    </td>
-                    <td style={{ padding: '15px', whiteSpace: 'nowrap' }}>
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          padding: '5px 9px',
-                          borderRadius: '20px',
-                          background: employee.isActive
-                            ? 'var(--color-success-bg)'
-                            : 'var(--color-surface-secondary)',
-                          color: employee.isActive
-                            ? 'var(--color-success-text)'
-                            : 'var(--color-text-secondary)',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {employee.isActive ? 'Active' : 'Inactive'}
+                    <td style={{ padding: '13px 15px', whiteSpace: 'nowrap' }}><code style={{ padding: '4px 7px', borderRadius: 6, background: 'var(--color-surface-secondary)', color: 'var(--color-text)' }}>{employee.employeeId}</code></td>
+                    <td style={{ padding: '13px 15px', whiteSpace: 'nowrap', color: 'var(--color-text-secondary)' }}>{getDepartmentName(employee.departmentId)}</td>
+                    <td style={{ padding: '13px 15px', whiteSpace: 'nowrap' }}>{roleLabel(employee.role)}</td>
+                    <td style={{ padding: '13px 15px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 9px', borderRadius: 20, background: employee.isActive ? 'var(--color-success-bg)' : 'var(--color-surface-secondary)', color: employee.isActive ? 'var(--color-success-text)' : 'var(--color-text-secondary)', fontSize: 11, fontWeight: 700 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{employee.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td style={{ padding: '12px 15px', minWidth: '200px' }}>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-                        <button
-                          type="button"
-                          onClick={() => openEditForm(employee)}
-                          style={{
-                            ...buttonStyle,
-                            background: 'var(--color-surface)',
-                            color: 'var(--color-text)',
-                          }}
-                        >
-                          Edit
-                        </button>
-                        {employee.isActive && employee.id !== 1 && (
-                          <button
-                            type="button"
-                            onClick={() => void handleResetPassword(employee)}
-                            style={{
-                              ...buttonStyle,
-                              background: 'var(--color-surface)',
-                              color: 'var(--color-text)',
-                            }}
-                          >
-                            Reset password
-                          </button>
-                        )}
-                        {employee.isActive && (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeactivate(employee)}
-                            style={{
-                              ...buttonStyle,
-                              background: 'var(--color-surface)',
-                              color: 'var(--color-danger-text)',
-                            }}
-                          >
-                            Deactivate
-                          </button>
-                        )}
+                    <td style={{ padding: '11px 15px', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button type="button" onClick={() => openEditForm(employee)} style={actionButton()}>Edit</button>
+                        {employee.isActive && employee.id !== 1 && <button type="button" onClick={() => void handleResetPassword(employee)} style={actionButton()}>Reset password</button>}
+                        {employee.isActive && <button type="button" onClick={() => void handleDeactivate(employee)} style={actionButton('danger')}>Deactivate</button>}
                       </div>
                     </td>
                   </tr>
@@ -760,245 +434,64 @@ export default function EmployeesPage() {
             </table>
           </div>
         )}
-
-        <div
-          style={{
-            padding: '13px 17px',
-            borderTop: '1px solid var(--color-border)',
-            color: 'var(--color-text-secondary)',
-            fontSize: '12px',
-          }}
-        >
-          Showing {filteredEmployees.length} of {employees.length} employees
-        </div>
       </section>
 
       {showForm && (
-        <div
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeForm()
-          }}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px',
-            background: 'rgba(0, 0, 0, 0.55)',
-            overflowY: 'auto',
-          }}
-        >
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="employee-form-title"
-            style={{
-              width: '100%',
-              maxWidth: '560px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: '24px',
-              border: '1px solid var(--color-border)',
-              borderRadius: '15px',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: '15px',
-                marginBottom: '22px',
-              }}
-            >
+        <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeForm() }} style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18, background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(5px)', overflowY: 'auto' }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="employee-form-title" style={{ width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', padding: 24, border: '1px solid var(--color-border)', borderRadius: 18, background: 'var(--color-surface)', color: 'var(--color-text)', boxShadow: '0 24px 80px rgba(0,0,0,0.35)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 15, marginBottom: 22 }}>
               <div>
-                <h2
-                  id="employee-form-title"
-                  style={{ margin: 0, fontSize: '21px', fontWeight: 700 }}
-                >
-                  {editingEmployee ? 'Edit Employee' : 'Add Employee'}
-                </h2>
-                <p
-                  style={{
-                    margin: '6px 0 0',
-                    color: 'var(--color-text-secondary)',
-                    fontSize: '13px',
-                  }}
-                >
-                  {editingEmployee
-                    ? 'Update the employee account details.'
-                    : 'A random temporary password will be generated automatically.'}
-                </p>
+                <div style={{ color: 'var(--color-accent)', fontSize: 11, fontWeight: 750, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Employee account</div>
+                <h2 id="employee-form-title" style={{ margin: '5px 0 0', fontSize: 21, fontWeight: 750 }}>{editingEmployee ? 'Edit employee' : 'Add new employee'}</h2>
+                <p style={{ margin: '6px 0 0', color: 'var(--color-text-secondary)', fontSize: 12 }}>{editingEmployee ? 'Update account details and access.' : 'Employee ID and temporary password are generated automatically.'}</p>
               </div>
-              <button
-                type="button"
-                aria-label="Close form"
-                onClick={closeForm}
-                style={{
-                  ...buttonStyle,
-                  alignSelf: 'flex-start',
-                  background: 'var(--color-surface)',
-                  color: 'var(--color-text)',
-                }}
-              >
-                ✕
-              </button>
+              <button type="button" aria-label="Close form" onClick={closeForm} style={{ ...actionButton(), width: 36, height: 36, padding: 0, fontSize: 17 }}>×</button>
             </div>
 
             <form onSubmit={handleSave}>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-                  gap: '17px',
-                }}
-              >
-                <label>
-                  <span style={labelStyle}>Employee ID *</span>
-                  <input
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]{1,20}"
-                    maxLength={20}
-                    value={form.employeeId}
-                    onChange={(event) =>
-                      updateField('employeeId', event.target.value)
-                    }
-                    style={inputStyle}
-                    placeholder="e.g. 100002"
-                  />
-                </label>
+              {editingEmployee ? (
+                <div style={{ marginBottom: 16, padding: '11px 13px', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface-secondary)' }}>
+                  <div style={{ color: 'var(--color-text-secondary)', fontSize: 11 }}>Employee ID</div>
+                  <code style={{ display: 'block', marginTop: 4, color: 'var(--color-text)', fontSize: 14 }}>{form.employeeId}</code>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 16, padding: '11px 13px', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface-secondary)', display: 'flex', gap: 9, alignItems: 'center' }}>
+                  <span style={{ color: 'var(--color-accent)', fontSize: 17 }}>✦</span>
+                  <span style={{ color: 'var(--color-text-secondary)', fontSize: 12 }}>A unique sequential Employee ID will be assigned when you create this account.</span>
+                </div>
+              )}
 
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(205px, 1fr))', gap: 15 }}>
                 <label>
-                  <span style={labelStyle}>Full name *</span>
-                  <input
-                    required
-                    maxLength={150}
-                    value={form.name}
-                    onChange={(event) => updateField('name', event.target.value)}
-                    style={inputStyle}
-                    placeholder="Employee full name"
-                  />
+                  <span style={labelBase}>Full name <span style={{ color: 'var(--color-danger-text)' }}>*</span></span>
+                  <input required maxLength={150} value={form.name} onChange={(event) => updateField('name', event.target.value)} style={inputBase} placeholder="Enter employee full name" />
                 </label>
-
                 <label>
-                  <span style={labelStyle}>Email address</span>
-                  <input
-                    type="email"
-                    maxLength={255}
-                    value={form.email}
-                    onChange={(event) =>
-                      updateField('email', event.target.value)
-                    }
-                    style={inputStyle}
-                    placeholder="employee@example.com"
-                  />
+                  <span style={labelBase}>Email address</span>
+                  <input type="email" maxLength={255} value={form.email} onChange={(event) => updateField('email', event.target.value)} style={inputBase} placeholder="name@company.com" />
                 </label>
-
                 <label>
-                  <span style={labelStyle}>Role *</span>
-                  <select
-                    required
-                    value={form.role}
-                    onChange={(event) =>
-                      updateField('role', event.target.value as Role)
-                    }
-                    style={inputStyle}
-                  >
+                  <span style={labelBase}>Role <span style={{ color: 'var(--color-danger-text)' }}>*</span></span>
+                  <select required value={form.role} onChange={(event) => updateField('role', event.target.value as Role)} style={inputBase}>
                     <option value="employee">Employee</option>
                     <option value="department_head">Department Head</option>
                     <option value="master">Master</option>
                   </select>
                 </label>
-
-                <label style={{ gridColumn: '1 / -1' }}>
-                  <span style={labelStyle}>Department</span>
-                  <select
-                    value={form.departmentId}
-                    required={form.role !== 'master'}
-                    onChange={(event) =>
-                      updateField('departmentId', event.target.value)
-                    }
-                    style={inputStyle}
-                  >
-                    <option value="">
-                      {form.role === 'master'
-                        ? 'No department'
-                        : 'Select department'}
-                    </option>
-                    {departments
-                      .filter(
-                        (department) =>
-                          department.is_active === true ||
-                          department.is_active === 1,
-                      )
-                      .map((department) => (
-                        <option
-                          key={department.id}
-                          value={String(department.id)}
-                        >
-                          {department.name} ({department.department_code})
-                        </option>
-                      ))}
+                <label>
+                  <span style={labelBase}>Department {form.role !== 'master' && <span style={{ color: 'var(--color-danger-text)' }}>*</span>}</span>
+                  <select value={form.departmentId} required={form.role !== 'master'} onChange={(event) => updateField('departmentId', event.target.value)} style={inputBase}>
+                    <option value="">{form.role === 'master' ? 'No department' : 'Select department'}</option>
+                    {activeDepartments.map((department) => <option key={department.id} value={String(department.id)}>{department.name} ({department.department_code})</option>)}
                   </select>
                 </label>
               </div>
 
-              {error && (
-                <p
-                  role="alert"
-                  style={{
-                    margin: '16px 0 0',
-                    color: 'var(--color-danger-text)',
-                    fontSize: '13px',
-                  }}
-                >
-                  {error}
-                </p>
-              )}
+              {error && <p role="alert" style={{ margin: '15px 0 0', color: 'var(--color-danger-text)', fontSize: 12 }}>{error}</p>}
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '10px',
-                  marginTop: '24px',
-                }}
-              >
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={closeForm}
-                  style={{
-                    ...buttonStyle,
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text)',
-                    opacity: saving ? 0.6 : 1,
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  style={{
-                    ...buttonStyle,
-                    background: 'var(--color-accent)',
-                    color: '#fff',
-                    borderColor: 'var(--color-accent)',
-                    opacity: saving ? 0.6 : 1,
-                  }}
-                >
-                  {saving
-                    ? 'Saving...'
-                    : editingEmployee
-                      ? 'Save Changes'
-                      : 'Create Employee'}
-                </button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9, marginTop: 24, paddingTop: 17, borderTop: '1px solid var(--color-border)' }}>
+                <button type="button" disabled={saving} onClick={closeForm} style={actionButton()}>Cancel</button>
+                <button type="submit" disabled={saving} style={{ ...buttonBase, minWidth: 135, background: 'var(--color-accent)', color: '#fff', borderColor: 'var(--color-accent)', opacity: saving ? 0.65 : 1 }}>{saving ? 'Saving…' : editingEmployee ? 'Save changes' : 'Create employee'}</button>
               </div>
             </form>
           </section>

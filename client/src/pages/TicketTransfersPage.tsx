@@ -83,9 +83,6 @@ export default function TicketTransfersPage({
 }: TicketTransfersPageProps) {
   const [departments, setDepartments] = useState<Department[]>([])
   const [requests, setRequests] = useState<TransferRequest[]>([])
- const [ticketId, setTicketId] = useState(
-  initialTicketId != null ? String(initialTicketId) : '',
-)
   const [toDepartmentId, setToDepartmentId] = useState('')
   const [reason, setReason] = useState('')
   const [reviewComments, setReviewComments] = useState<Record<number, string>>({})
@@ -139,8 +136,14 @@ export default function TicketTransfersPage({
     setError('')
     setMessage('')
 
-    if (!ticketId.trim() || !toDepartmentId || reason.trim().length < 5) {
-      setError('Enter a ticket ID, destination department, and a reason of at least 5 characters.')
+    if (
+      initialTicketId == null ||
+      !Number.isSafeInteger(Number(initialTicketId)) ||
+      Number(initialTicketId) <= 0 ||
+      !toDepartmentId ||
+      reason.trim().length < 5
+    ) {
+      setError('Select a destination department and enter a reason of at least 5 characters.')
       return
     }
 
@@ -148,7 +151,7 @@ export default function TicketTransfersPage({
 
     try {
       const response = await fetch(
-        `${API_URL}/${encodeURIComponent(ticketId.trim())}/transfer-requests`,
+        `${API_URL}/${encodeURIComponent(String(initialTicketId))}/transfer-requests`,
         {
           method: 'POST',
           credentials: 'include',
@@ -167,7 +170,6 @@ export default function TicketTransfersPage({
       }
 
       setMessage(data.message || 'Transfer request submitted.')
-      setTicketId('')
       setToDepartmentId('')
       setReason('')
       await loadData()
@@ -273,28 +275,27 @@ export default function TicketTransfersPage({
           Request a transfer
         </h3>
         <p className="mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          Enter the ticket's database ID and explain why another department should handle it.
+          {initialTicketId != null
+            ? `Requesting a department transfer for ticket #${initialTicketId}.`
+            : 'Open a ticket and choose Request transfer to submit a department transfer request.'}
         </p>
 
+        {initialTicketId != null && Number.isSafeInteger(Number(initialTicketId)) && Number(initialTicketId) > 0 ? (
         <form onSubmit={submitRequest} className="mt-5 space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              Ticket database ID
-              <input
-                type="number"
-                min="1"
-                required
-                value={ticketId}
-                onChange={(event) => setTicketId(event.target.value)}
-                placeholder="e.g. 12"
-                className="mt-1.5 w-full rounded-lg border px-3 py-2.5 font-normal outline-none"
-                style={{
-                  backgroundColor: 'var(--color-bg)',
-                  borderColor: 'var(--color-border)',
-                  color: 'var(--color-text)',
-                }}
-              />
-            </label>
+            <div
+              className="rounded-lg border px-3 py-2.5 text-sm"
+              style={{
+                backgroundColor: 'var(--color-bg)',
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text)',
+              }}
+            >
+              <span className="block text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                Ticket
+              </span>
+              <span className="mt-1 block font-semibold">#{initialTicketId}</span>
+            </div>
 
             <label className="block text-sm font-medium" style={{ color: 'var(--color-text)' }}>
               Destination department
@@ -347,6 +348,7 @@ export default function TicketTransfersPage({
             {submitting ? 'Submitting...' : 'Submit transfer request'}
           </button>
         </form>
+        ) : null}
       </section>}
 
       <section

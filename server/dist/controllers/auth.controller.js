@@ -13,26 +13,40 @@ async function login(req, res) {
     if (!parsed.success) {
         return res.status(400).json({
             success: false,
-            message: 'Please enter a valid Employee ID or email and password.',
+            message: 'Please enter your Employee ID, name or email and password.',
         });
     }
     try {
         const { identifier, password } = parsed.data;
+        const normalizedIdentifier = identifier.trim();
         const users = await (0, db_js_1.query)(`SELECT
-      u.id,
-      u.employee_id,
-      u.email,
-      u.full_name,
-      u.password_hash,
-      u.role,
-      u.department_id,
-      d.name AS department_name,
-      u.is_active,
-      u.must_change_password
-   FROM users u
-   LEFT JOIN departments d ON d.id = u.department_id
-   WHERE u.employee_id = ? OR u.email = ?
-   LIMIT 1`, [identifier, identifier]);
+          u.id,
+          u.employee_id,
+          u.email,
+          u.full_name,
+          u.password_hash,
+          u.role,
+          u.department_id,
+          d.name AS department_name,
+          u.is_active,
+          u.must_change_password
+       FROM users u
+       LEFT JOIN departments d ON d.id = u.department_id
+       WHERE
+          u.employee_id = ?
+          OR LOWER(u.email) = LOWER(?)
+          OR LOWER(TRIM(u.full_name)) = LOWER(?)
+       LIMIT 2`, [
+            normalizedIdentifier,
+            normalizedIdentifier,
+            normalizedIdentifier,
+        ]);
+        if (users.length > 1) {
+            return res.status(400).json({
+                success: false,
+                message: 'Multiple employees have this name. Please use your Employee ID or email.',
+            });
+        }
         const user = users[0];
         if (!user || !user.is_active) {
             return res.status(401).json({

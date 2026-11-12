@@ -30,16 +30,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       setPassword('')
       onLoginSuccess(data.user)
     } catch {
-      setError(
-        'Unable to connect to the server. Please check your connection.',
-      )
+      setError('Unable to connect to the server. Please check your connection.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+    <form onSubmit={handleSubmit} className="w-full space-y-6">
       <div className="space-y-2">
         <label
           htmlFor="identifier"
@@ -48,19 +46,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           Employee ID, name or email
         </label>
 
-        <div className="relative">
-          <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              className="h-5 w-5"
-            >
+        <div className="group relative">
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 transition-colors group-focus-within:text-blue-600">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="1.7" className="h-5 w-5">
               <circle cx="12" cy="8" r="4" />
               <path d="M5 21a7 7 0 0 1 14 0" />
             </svg>
-          </span>
+          </div>
 
           <input
             id="identifier"
@@ -69,11 +62,11 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             autoComplete="username"
             value={identifier}
             onChange={(event) => setIdentifier(event.target.value)}
-            placeholder="Enter your ID, name or email"
+            placeholder="Enter your employee ID or email"
             required
             maxLength={254}
             disabled={loading}
-            className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) py-3.5 pl-12 pr-4 text-sm text-(--color-text) outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
+            className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) py-4 pl-12 pr-4 text-sm text-(--color-text) outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 disabled:opacity-60"
           />
         </div>
       </div>
@@ -109,41 +102,27 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       <button
         type="submit"
         disabled={loading || !identifier.trim() || !password}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-blue-600/30 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="group flex w-full items-center justify-center gap-3 rounded-xl bg-blue-600 px-5 py-4 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-600/20 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
       >
         {loading ? (
           <>
-            <svg
-              className="h-5 w-5 animate-spin"
-              viewBox="0 0 24 24"
-              fill="none"
-            >
-              <circle
-                cx="12"
-                cy="12"
-                r="9"
-                stroke="currentColor"
-                strokeWidth="3"
-                opacity=".25"
-              />
-              <path
-                d="M21 12a9 9 0 0 0-9-9"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
+            <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="9" stroke="currentColor"
+                strokeWidth="3" opacity=".25" />
+              <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor"
+                strokeWidth="3" strokeLinecap="round" />
             </svg>
             Signing in...
           </>
         ) : (
           <>
-            Sign in
+            Sign in to your account
             <svg
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className="h-4 w-4"
+              className="h-4 w-4 transition-transform group-hover:translate-x-1"
             >
               <path d="M5 12h14m-6-6 6 6-6 6" />
             </svg>
@@ -151,9 +130,17 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         )}
       </button>
 
-      <p className="text-center text-xs text-(--color-text-muted)">
-        Secure employee access · Helpdesk Portal
-      </p>
+      <div className="flex items-center justify-center gap-2 pt-1 text-xs text-(--color-text-muted)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="1.7" className="h-4 w-4 text-emerald-600">
+          <rect x="5" y="10" width="14" height="11" rx="2" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          <path d="m10 15 1.5 1.5L14 14" />
+        </svg>
+        Secure employee access
+        <span className="text-slate-300">·</span>
+        Helpdesk Portal
+      </div>
     </form>
   )
 }

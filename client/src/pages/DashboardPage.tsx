@@ -1693,7 +1693,7 @@ async function handleWorkflowAction(
                   <button
                     type="button"
                     onClick={() => {
-                      setTransferTicketId(selectedTicket.id);
+                      setTransferTicketId(ticket.id);
                       setActivePage("transfers");
                     }}
                     className={`${primaryButton} w-full`}

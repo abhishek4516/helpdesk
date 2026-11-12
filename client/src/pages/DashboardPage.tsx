@@ -1290,9 +1290,73 @@ async function handleWorkflowAction(
               </div>
             </div>
 
-            <span className="hidden size-11 items-center justify-center rounded-xl bg-(--color-accent-soft) text-(--color-accent) sm:flex">
-              <Icon name="ticket" className="size-7" />
-            </span>
+            {canAssign ? (
+              <div className="w-full max-w-md rounded-xl border border-(--color-accent)/30 bg-(--color-accent-soft)/40 p-3 sm:w-auto sm:min-w-[340px]">
+                <label
+                  htmlFor="assign-employee"
+                  className="mb-2 block text-xs font-semibold text-(--color-text)"
+                >
+                  Assign ticket
+                </label>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select
+                    id="assign-employee"
+                    value={assignmentEmployeeId}
+                    onChange={(event) => {
+                      setAssignmentEmployeeId(event.target.value);
+                      setAssignmentError("");
+                    }}
+                    disabled={loadingEmployees || savingAssignment}
+                    className={`${fieldClass} min-w-0 flex-1`}
+                  >
+                    <option value="">
+                      {loadingEmployees
+                        ? "Loading employees…"
+                        : "Select an employee"}
+                    </option>
+
+                    {assignableEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>
+                        {employee.fullName} ({employee.employeeId})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleAssignTicket()}
+                    disabled={
+                      !assignmentEmployeeId ||
+                      savingAssignment ||
+                      loadingEmployees
+                    }
+                    className={`${primaryButton} shrink-0`}
+                  >
+                    {savingAssignment ? "Assigning…" : "Assign"}
+                  </button>
+                </div>
+
+                {assignmentError && (
+                  <p
+                    role="alert"
+                    className="mt-2 text-xs text-(--color-danger-text)"
+                  >
+                    {assignmentError}
+                  </p>
+                )}
+
+                {!loadingEmployees && assignableEmployees.length === 0 && (
+                  <p className="mt-2 text-xs text-(--color-text-secondary)">
+                    No active employees are available.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <span className="hidden size-11 items-center justify-center rounded-xl bg-(--color-accent-soft) text-(--color-accent) sm:flex">
+                <Icon name="ticket" className="size-7" />
+              </span>
+            )}
           </div>
         </section>
 
@@ -1603,75 +1667,6 @@ async function handleWorkflowAction(
                 </p>
               </div>
             </details>
-
-            {canAssign && (
-              <section className={`overflow-hidden ${cardClass}`}>
-                <CardHeader
-                  title="Assign ticket"
-                  subtitle="Select an employee to handle this request"
-                />
-
-                <div className="space-y-3 p-5">
-                  <label
-                    htmlFor="assign-employee"
-                    className="block text-xs font-medium text-(--color-text-secondary)"
-                  >
-                    Employee
-                  </label>
-
-                  <select
-                    id="assign-employee"
-                    value={assignmentEmployeeId}
-                    onChange={(event) => {
-                      setAssignmentEmployeeId(event.target.value);
-                      setAssignmentError("");
-                    }}
-                    disabled={loadingEmployees || savingAssignment}
-                    className={fieldClass}
-                  >
-                    <option value="">
-                      {loadingEmployees
-                        ? "Loading employees…"
-                        : "Select an employee"}
-                    </option>
-
-                    {assignableEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>
-                        {employee.fullName} ({employee.employeeId})
-                      </option>
-                    ))}
-                  </select>
-
-                  {assignmentError && (
-                    <p
-                      role="alert"
-                      className="text-xs text-(--color-danger-text)"
-                    >
-                      {assignmentError}
-                    </p>
-                  )}
-
-                  {!loadingEmployees && assignableEmployees.length === 0 && (
-                    <p className="text-xs text-(--color-text-secondary)">
-                      No active employees are available.
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => void handleAssignTicket()}
-                    disabled={
-                      !assignmentEmployeeId ||
-                      savingAssignment ||
-                      loadingEmployees
-                    }
-                    className={`${primaryButton} w-full`}
-                  >
-                    {savingAssignment ? "Assigning…" : "Assign ticket"}
-                  </button>
-                </div>
-              </section>
-            )}
 
             {canTransfer && (
               <section className={`overflow-hidden ${cardClass}`}>

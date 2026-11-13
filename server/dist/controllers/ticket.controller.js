@@ -42,8 +42,14 @@ async function createTicket(req, res) {
             res.status(401).json({ success: false, message: 'Please log in to create a ticket.' });
             return;
         }
-        const [departments] = await database_js_1.pool.execute(`SELECT id, name, department_code AS departmentCode
-       FROM departments WHERE id = ? AND is_active = 1 LIMIT 1`, [departmentId]);
+        const [departments] = await database_js_1.pool.execute(`SELECT
+  id,
+  name,
+  department_code AS departmentCode,
+  head_user_id AS headUserId
+FROM departments
+WHERE id = ? AND is_active = 1
+LIMIT 1`, [departmentId]);
         if (departments.length === 0) {
             res.status(400).json({ success: false, message: 'Please select an active department.' });
             return;
@@ -52,6 +58,18 @@ async function createTicket(req, res) {
         const [result] = await database_js_1.pool.execute(`INSERT INTO tickets
        (ticket_code, title, description, requester_user_id, department_id, status)
        VALUES (?, ?, ?, ?, ?, 'open')`, [ticketCode, title, description, user.id, departmentId]);
+        const departmentHeadId = departments[0].headUserId;
+        if (departmentHeadId && departmentHeadId !== user.id) {
+            await database_js_1.pool.execute(`INSERT INTO notifications
+      (recipient_user_id, ticket_id, notification_type, title, message)
+     VALUES (?, ?, ?, ?, ?)`, [
+                departmentHeadId,
+                result.insertId,
+                'ticket_created',
+                'New ticket received',
+                `${user.name} raised a new ticket: ${title}`,
+            ]);
+        }
         res.status(201).json({
             success: true,
             message: 'Ticket created successfully.',
@@ -105,15 +123,12 @@ async function getTickets(req, res) {
     `;
         const params = [];
         if (user.role === 'master') {
-            // Master users can view all tickets.
         }
         else if (user.role === 'department_head') {
-            // Department heads can view all tickets in their department.
             sql += ' WHERE d.head_user_id = ?';
             params.push(user.id);
         }
         else {
-            // Employees can view tickets they created or tickets assigned to them.
             sql += ' WHERE (t.requester_user_id = ? OR t.assigned_employee_id = ?)';
             params.push(user.id, user.id);
         }
@@ -153,7 +168,12 @@ async function assignTicket(req, res) {
             });
             return;
         }
-        const [tickets] = await database_js_1.pool.execute(`SELECT t.id, t.department_id AS departmentId, t.status
+        const [tickets] = await database_js_1.pool.execute(`SELECT
+         t.id,
+         t.ticket_code AS ticketCode,
+         t.title,
+         t.department_id AS departmentId,
+         t.status
        FROM tickets t
        INNER JOIN departments d ON d.id = t.department_id
        WHERE t.id = ?
@@ -219,6 +239,17 @@ async function assignTicket(req, res) {
             await connection.execute(`INSERT INTO ticket_activities
            (ticket_id, actor_user_id, event_type, title, description, to_employee_id)
          VALUES (?, ?, 'assigned', 'Ticket assigned', ?, ?)`, [ticketId, user.id, `Assigned to ${employees[0].fullName}`, employeeId]);
+            if (employeeId !== Number(user.id)) {
+                await connection.execute(`INSERT INTO notifications
+             (recipient_user_id, ticket_id, notification_type, title, message)
+           VALUES (?, ?, ?, ?, ?)`, [
+                    employeeId,
+                    ticketId,
+                    'ticket_assigned',
+                    'New ticket assigned',
+                    `Ticket ${ticket.ticketCode}: ${ticket.title} has been assigned to you.`,
+                ]);
+            }
             await connection.commit();
         }
         catch (error) {
@@ -259,7 +290,6 @@ async function getTicketLifecycle(req, res) {
             });
             return;
         }
-        // Fetch the ticket and its creator.
         const [tickets] = await database_js_1.pool.execute(`SELECT
          t.id,
          t.ticket_code AS ticketCode,
@@ -289,7 +319,6 @@ async function getTicketLifecycle(req, res) {
             return;
         }
         const ticket = tickets[0];
-        // Apply the same basic visibility rules as getTickets.
         if (user.role === 'department_head') {
             const [visible] = await database_js_1.pool.execute(`SELECT id
          FROM departments
@@ -312,7 +341,6 @@ async function getTicketLifecycle(req, res) {
             });
             return;
         }
-        // Fetch durable comments, resolution, and other workflow activity events.
         const [activityRows] = await database_js_1.pool.execute(`SELECT
          a.id,
          a.event_type AS eventType,
@@ -328,7 +356,6 @@ async function getTicketLifecycle(req, res) {
        WHERE a.ticket_id = ?
          AND a.event_type NOT IN ('created', 'transfer_requested', 'transfer_reviewed')
        ORDER BY a.created_at ASC, a.id ASC`, [ticketId]);
-        // Fetch all transfer requests and their review details.
         const [transfers] = await database_js_1.pool.execute(`SELECT
          tr.id,
          tr.requested_by_user_id AS requestedByUserId,

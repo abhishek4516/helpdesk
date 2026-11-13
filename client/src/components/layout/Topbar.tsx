@@ -207,6 +207,7 @@ export default function Topbar({
 
   // Initial load and automatic refresh every 30 seconds
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadNotifications(true);
 
     const interval = window.setInterval(() => {

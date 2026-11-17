@@ -6,7 +6,7 @@ interface LoginFormProps {
   onLoginSuccess: (user: LoggedInUser) => void
 }
 
-/* Soft filled field: tinted at rest, white with a blue outline when focused */
+
 const fieldShell =
   'group relative rounded-2xl border border-transparent bg-slate-100/80 transition-all duration-200 ' +
   'hover:bg-slate-100 focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgb(59_130_246/0.12)] ' +
@@ -88,7 +88,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             setIdentifier(event.target.value)
             setError('')
           }}
-          placeholder="EMP-10482 or name@company.com"
+          placeholder="Please enter your employee id"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           className={fieldInput}

@@ -563,7 +563,7 @@ export default function Topbar({
               <BellIcon />
 
               {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border-2 border-(--color-surface) bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
+                <span className="absolute -top-0.5 -right-0.5 flex h-4.25 min-w-4.25 items-center justify-center rounded-full border-2 border-(--color-surface) bg-red-500 px-1 text-[9px] font-bold leading-none text-white">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               )}
@@ -577,7 +577,7 @@ export default function Topbar({
                   borderColor: "var(--color-border)",
                 }}
               >
-                {/* Dropdown header */}
+           
                 <div
                   className="flex items-center justify-between border-b px-4 py-3"
                   style={{ borderColor: "var(--color-border)" }}

@@ -1,3 +1,4 @@
+
 import { useId, useState, type FormEvent } from 'react'
 import { login } from '../../services/authService'
 import type { LoggedInUser } from '../../types/auth'
@@ -6,15 +7,14 @@ interface LoginFormProps {
   onLoginSuccess: (user: LoggedInUser) => void
 }
 
-
 const fieldShell =
   'group relative rounded-2xl border border-transparent bg-slate-100/80 transition-all duration-200 ' +
-  'hover:bg-slate-100 focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgb(59_130_246/0.12)] ' +
+  'hover:bg-slate-100 focus-within:border-[#8686AC] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgb(134_134_172/0.16)] ' +
   'has-[input:disabled]:opacity-60 has-[input[aria-invalid=true]]:border-red-400 ' +
   'dark:bg-white/5 dark:hover:bg-white/8 dark:focus-within:bg-white/10'
 
 const fieldLabel =
-  'pointer-events-none absolute left-4 top-2.5 text-[11px] font-medium leading-none text-(--color-text-muted) transition-colors group-focus-within:text-blue-600'
+  'pointer-events-none absolute left-4 top-2.5 text-[11px] font-medium leading-none text-(--color-text-muted) transition-colors group-focus-within:text-[#505081] dark:group-focus-within:text-[#8686AC]'
 
 const fieldInput =
   'h-14 w-full rounded-2xl bg-transparent pb-1.5 pl-4 pr-12 pt-5 text-sm font-semibold text-(--color-text) outline-none ' +
@@ -64,7 +64,6 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       aria-busy={loading}
       className="w-full space-y-3"
     >
-      {/* Identifier */}
       <div className={fieldShell}>
         <label htmlFor="identifier" className={fieldLabel}>
           Employee ID or email
@@ -101,7 +100,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           strokeWidth="1.7"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-(--color-text-muted) transition-colors group-focus-within:text-blue-600"
+          className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-(--color-text-muted) transition-colors group-focus-within:text-[#505081] dark:group-focus-within:text-[#8686AC]"
           aria-hidden="true"
         >
           <rect x="3" y="5" width="18" height="14" rx="3" />
@@ -110,7 +109,6 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         </svg>
       </div>
 
-      {/* Password */}
       <div className={fieldShell}>
         <label htmlFor="password" className={fieldLabel}>
           Password
@@ -140,7 +138,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           aria-label={showPassword ? 'Hide password' : 'Show password'}
           aria-pressed={showPassword}
           disabled={loading}
-          className="absolute right-2.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-(--color-text-muted) outline-none transition-colors hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="absolute right-2.5 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-(--color-text-muted) outline-none transition-colors hover:text-[#505081] dark:hover:text-[#8686AC] focus-visible:ring-2 focus-visible:ring-[#8686AC]"
         >
           {showPassword ? (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
@@ -157,7 +155,6 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         </button>
       </div>
 
-      {/* Error */}
       {error && (
         <div
           id={errorId}
@@ -180,12 +177,11 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         </div>
       )}
 
-      {/* Submit */}
       <div className="pt-3">
         <button
           type="submit"
           disabled={!canSubmit}
-          className="flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-blue-500 px-6 text-sm font-semibold text-white shadow-[0_10px_24px_-8px_rgb(59_130_246/0.7)] outline-none transition-all duration-200 hover:bg-blue-600 hover:shadow-[0_12px_28px_-8px_rgb(59_130_246/0.8)] focus-visible:ring-4 focus-visible:ring-blue-500/30 active:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-500/50 disabled:shadow-none"
+          className="flex h-13 w-full items-center justify-center gap-2.5 rounded-full bg-[#272757] px-6 text-sm font-semibold text-white shadow-[0_10px_24px_-8px_rgb(39_39_87/0.45)] outline-none transition-all duration-200 hover:bg-[#505081] hover:shadow-[0_12px_28px_-8px_rgb(80_80_129/0.5)] focus-visible:ring-4 focus-visible:ring-[#8686AC]/40 active:bg-[#0F0E47] disabled:cursor-not-allowed disabled:bg-[#272757]/50 disabled:shadow-none"
         >
           {loading ? (
             <>
@@ -206,7 +202,6 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         </button>
       </div>
 
-      {/* Footer */}
       <p className="flex items-center justify-center gap-2 pt-2 text-xs text-(--color-text-muted)">
         <svg
           viewBox="0 0 24 24"
@@ -215,7 +210,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           strokeWidth="1.7"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="h-4 w-4 shrink-0 text-emerald-600"
+          className="h-4 w-4 shrink-0 text-[#505081] dark:text-[#8686AC]"
           aria-hidden="true"
         >
           <rect x="5" y="10" width="14" height="11" rx="2" />

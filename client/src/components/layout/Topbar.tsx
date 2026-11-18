@@ -15,6 +15,7 @@ interface TopbarProps {
   loadingTickets: boolean;
   ticketError: string;
   onSelectTicket: (ticket: Ticket) => void;
+  onLogout: () => void;
 }
 
 type Theme = "light" | "dark";
@@ -79,6 +80,15 @@ function BellIcon() {
   );
 }
 
+function LogoutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" {...iconProps}>
+      <path d="M10 17l5-5-5-5M15 12H3" />
+      <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+    </svg>
+  );
+}
+
 function CheckIcon() {
   return (
     <svg viewBox="0 0 20 20" className="size-4" {...iconProps}>
@@ -105,7 +115,7 @@ function formatTime(dateString: string) {
 }
 
 const iconButton =
-  "flex size-9 shrink-0 items-center justify-center rounded-lg text-(--color-text-secondary) transition hover:bg-(--color-accent-soft) hover:text-(--color-text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-accent)";
+  "flex size-9 shrink-0 items-center justify-center rounded-full text-(--color-text-secondary) transition hover:bg-(--color-accent-soft) hover:text-(--color-text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-accent)";
 
 export default function Topbar({
   user,
@@ -114,6 +124,7 @@ export default function Topbar({
   loadingTickets,
   ticketError,
   onSelectTicket,
+  onLogout,
 }: TopbarProps) {
   const [theme, setTheme] = useState<Theme>(() => {
     try {
@@ -714,6 +725,8 @@ export default function Topbar({
             )}
           </div>
 
+        
+
           {/* Theme toggle */}
           <button
             type="button"
@@ -728,7 +741,15 @@ export default function Topbar({
           >
             {theme === "light" ? <MoonIcon /> : <SunIcon />}
           </button>
-
+   <button
+            type="button"
+            onClick={onLogout}
+            aria-label="Log out"
+            title="Log out"
+            className={`${iconButton} hover:bg-(--color-danger-bg) hover:text-(--color-danger-text)`}
+          >
+            <LogoutIcon />
+          </button>
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative shrink-0">
             <button

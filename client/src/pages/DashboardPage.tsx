@@ -939,8 +939,8 @@ const filteredTickets = useMemo(() => {
     ["assigned", "in_progress", "forwarding_requested"].includes(ticket.status),
   ).length;
 
-  const resolvedCount = tickets.filter(
-    (ticket) => ticket.status === "resolved",
+  const closedCount = tickets.filter(
+    (ticket) => ticket.status === "closed",
   ).length;
 
   const hasFilters = Boolean(searchQuery.trim()) || statusFilter !== "all";
@@ -1931,9 +1931,9 @@ async function handleWorkflowAction(
         showShare: true,
       },
       {
-        label: "Resolved",
-        value: resolvedCount,
-        description: "Marked as resolved",
+        label: "Closed",
+        value: closedCount,
+        description: "Marked as closed",
         icon: "check",
         tone: "emerald",
         showShare: true,
@@ -2296,7 +2296,6 @@ async function handleWorkflowAction(
           setSelectedTicket(null);
           setSuccessMessage("");
         }}
-        onLogout={onLogout}
       />
 
       <div className="min-w-0 flex-1">
@@ -2307,6 +2306,7 @@ async function handleWorkflowAction(
           loadingTickets={loadingTickets}
           ticketError={ticketError}
           onSelectTicket={openTicketDetails}
+          onLogout={onLogout}
         />
 
         <main className="mx-auto w-full max-w-[1600px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">

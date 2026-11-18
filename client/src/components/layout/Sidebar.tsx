@@ -6,7 +6,6 @@ interface SidebarProps {
   role: UserRole;
   activePage: string;
   onNavigate: (page: string) => void;
-  onLogout: () => void;
 }
 
 const navigationByRole: Record<
@@ -90,13 +89,6 @@ function NavIcon({ name }: { name: string }) {
         </svg>
       );
 
-    case "logout":
-      return (
-        <svg viewBox="0 0 24 24" {...common}>
-          <path d="M10 17l5-5-5-5M15 12H3" />
-          <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
-        </svg>
-      );
 
     default:
       return null;
@@ -157,7 +149,6 @@ export default function Sidebar({
   role,
   activePage,
   onNavigate,
-  onLogout,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -225,10 +216,6 @@ export default function Sidebar({
     setMobileOpen(false);
   }
 
-  function logout() {
-    setMobileOpen(false);
-    onLogout();
-  }
 
   return (
     <>
@@ -258,60 +245,66 @@ export default function Sidebar({
           collapsed ? "md:w-19" : "md:w-60",
         ].join(" ")}
       >
-        {/* Brand header */}
-        <div
-          className={[
-            "flex h-14 shrink-0 items-center justify-between gap-3 border-b border-(--color-border) px-4",
-            collapsed ? "md:justify-center md:px-2" : "",
-          ].join(" ")}
-        >
-          <div
-            className={[
-              "flex min-w-0 items-center gap-3",
-              collapsed ? "md:justify-center" : "",
-            ].join(" ")}
-          >
-            <div
-              className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-(--color-accent) text-white shadow-sm"
-              aria-hidden="true"
-            >
-              <svg viewBox="0 0 24 24" fill="none" className="size-5">
-                <path
-                  d="M12 3.5 20 7.5V12.5C20 17 16.6 20 12 21C7.4 20 4 17 4 12.5V7.5L12 3.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="m8.5 12 2.3 2.3 4.8-5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
+        
+{/* Brand header */}
+<div
+  className={[
+    "flex h-14 shrink-0 items-center justify-between gap-3 border-b border-(--color-border) px-4",
+    collapsed ? "md:justify-center md:px-2" : "",
+  ].join(" ")}
+>
+  <button
+    type="button"
+    onClick={() => navigateTo("overview")}
+    aria-label="Go to Sunic Support overview"
+    title={collapsed ? "Sunic Support - Overview" : undefined}
+    className={[
+      "flex min-w-0 items-center gap-3 rounded-lg text-left outline-none transition-opacity hover:opacity-80",
+      "focus-visible:ring-2 focus-visible:ring-(--color-accent) focus-visible:ring-offset-2",
+      collapsed ? "md:justify-center" : "",
+    ].join(" ")}
+  >
+    <div
+      className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-(--color-accent) text-white shadow-sm"
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 24 24" fill="none" className="size-5">
+        <path
+          d="M12 3.5 20 7.5V12.5C20 17 16.6 20 12 21C7.4 20 4 17 4 12.5V7.5L12 3.5Z"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+        />
+        <path
+          d="m8.5 12 2.3 2.3 4.8-5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
 
-            <div className={collapsed ? "md:hidden" : "min-w-0"}>
-              <p className="truncate text-sm font-bold tracking-tight">
-                Helpdesk
-              </p>
-              <p className="truncate text-[11px] text-(--color-text-secondary)">
-                Employee support
-              </p>
-            </div>
-          </div>
+    <div className={collapsed ? "md:hidden" : "min-w-0"}>
+      <p className="truncate text-sm font-bold tracking-tight">
+        Sunic
+      </p>
+      <p className="truncate text-[11px] text-(--color-text-secondary)">
+        Support
+      </p>
+    </div>
+  </button>
 
-          {/* Mobile close */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close navigation menu"
-            className={`flex size-9 shrink-0 items-center justify-center rounded-lg text-(--color-text-secondary) transition hover:bg-(--color-surface-secondary) hover:text-(--color-text) md:hidden ${focusRing}`}
-          >
-            <CloseIcon />
-          </button>
-        </div>
+  <button
+    type="button"
+    onClick={() => setMobileOpen(false)}
+    aria-label="Close navigation menu"
+    className={`flex size-9 shrink-0 items-center justify-center rounded-lg text-(--color-text-secondary) transition hover:bg-(--color-surface-secondary) hover:text-(--color-text) md:hidden ${focusRing}`}
+  >
+    <CloseIcon />
+  </button>
+</div>
+
 
         {/* Navigation */}
         <nav
@@ -384,19 +377,6 @@ export default function Sidebar({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={logout}
-            title={collapsed ? "Log out" : undefined}
-            className={[
-              "flex min-h-11 w-full items-center rounded-xl text-left text-[13px] font-medium text-(--color-text-secondary) transition-colors hover:bg-(--color-danger-bg) hover:text-(--color-danger-text)",
-              focusRing,
-              collapsed ? "md:justify-center md:px-0" : "gap-3 px-3",
-            ].join(" ")}
-          >
-            <NavIcon name="logout" />
-            <span className={collapsed ? "md:hidden" : ""}>Log out</span>
-          </button>
         </div>
 
         {/* Desktop collapse toggle */}

@@ -4,8 +4,11 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import dotenv from 'dotenv'
+import { createServer } from 'node:http'
+import { Server } from 'socket.io'
 
 import { testDatabaseConnection } from './config/database.js'
+import { authenticateSocket } from './middleware/socket.middleware.js'
 
 import authRoutes from './routes/auth.routes.js'
 import ticketRoutes from './routes/ticket.routes.js'
@@ -16,9 +19,16 @@ import notificationRoutes from './routes/notifications.routes.js'
 dotenv.config()
 
 const app = express()
+const httpServer = createServer(app)
 const PORT = Number(process.env.PORT) || 5000
 
-// Security and middleware
+const io = new Server(httpServer, {
+  cors: {
+    origin: 'http://localhost:5173',
+    credentials: true,
+  },
+})
+
 app.use(helmet())
 
 app.use(
@@ -31,14 +41,12 @@ app.use(
 app.use(express.json())
 app.use(cookieParser())
 
-// API routes
 app.use('/api/auth', authRoutes)
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/departments', departmentRoutes)
 app.use('/api/employees', employeeRoutes)
 app.use('/api/notifications', notificationRoutes)
 
-// Health check
 app.get('/api/health', (_req, res) => {
   res.json({
     success: true,
@@ -46,13 +54,25 @@ app.get('/api/health', (_req, res) => {
   })
 })
 
-// Start server after connecting to MySQL
+io.use(authenticateSocket)
+
+io.on('connection', (socket) => {
+  const user = socket.data.user
+
+  console.log(`Socket connected: ${user.employeeId}`)
+
+  socket.on('disconnect', () => {
+    console.log(`Socket disconnected: ${user.employeeId}`)
+  })
+})
+
 async function startServer() {
   try {
     await testDatabaseConnection()
 
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`Helpdesk API running at http://localhost:${PORT}`)
+      console.log('Socket.IO server is ready')
     })
   } catch (error) {
     console.error('Failed to connect to MySQL:', error)

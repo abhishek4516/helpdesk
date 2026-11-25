@@ -7,6 +7,7 @@ import {
   markAllNotificationsRead,
 } from "../../services/notificationService";
 import type { NotificationItem } from "../../services/notificationService";
+import emptyStateIllustration from "../../assets/empty-state.svg";
 
 interface TopbarProps {
   user: LoggedInUser;
@@ -19,6 +20,7 @@ interface TopbarProps {
 }
 
 type Theme = "light" | "dark";
+type NotificationFilter = "all" | "unread";
 
 const iconProps = {
   fill: "none",
@@ -89,16 +91,26 @@ function LogoutIcon() {
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 20 20" className="size-4" {...iconProps}>
-      <path d="m4 10 4 4 8-8" />
-    </svg>
-  );
-}
-
 function formatStatus(status: string) {
   return status.replaceAll("_", " ");
+}
+
+function getNotificationDateGroup(dateString: string) {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "Earlier";
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  const isSameDay = (first: Date, second: Date) =>
+    first.getFullYear() === second.getFullYear() &&
+    first.getMonth() === second.getMonth() &&
+    first.getDate() === second.getDate();
+
+  if (isSameDay(date, today)) return "Today";
+  if (isSameDay(date, yesterday)) return "Yesterday";
+  return "Earlier";
 }
 
 function formatTime(dateString: string) {
@@ -148,11 +160,36 @@ export default function Topbar({
   const [notificationError, setNotificationError] = useState("");
   const [notificationActionLoading, setNotificationActionLoading] =
     useState(false);
+  const [notificationFilter, setNotificationFilter] =
+    useState<NotificationFilter>("all");
 
   const searchRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const visibleNotifications = useMemo(
+    () =>
+      notificationFilter === "unread"
+        ? notifications.filter((notification) => Number(notification.is_read) === 0)
+        : notifications,
+    [notifications, notificationFilter],
+  );
+
+  const groupedNotifications = useMemo(() => {
+    const groups = new Map<string, NotificationItem[]>();
+
+    visibleNotifications.forEach((notification) => {
+      const group = getNotificationDateGroup(notification.created_at);
+      const current = groups.get(group) ?? [];
+      current.push(notification);
+      groups.set(group, current);
+    });
+
+    return ["Today", "Yesterday", "Earlier"]
+      .filter((group) => groups.has(group))
+      .map((group) => ({ title: group, items: groups.get(group) ?? [] }));
+  }, [visibleNotifications]);
 
   // Theme
   useEffect(() => {
@@ -309,7 +346,7 @@ export default function Topbar({
     notification: NotificationItem,
   ) {
     try {
-      if (!notification.is_read) {
+      if (Number(notification.is_read) === 0) {
         await markNotificationRead(notification.id);
 
         setNotifications((current) =>
@@ -582,13 +619,12 @@ export default function Topbar({
 
             {notificationOpen && (
               <div
-                className="fixed inset-x-3 top-15 z-50 overflow-hidden rounded-xl border shadow-xl sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-[min(24rem,calc(100vw-2rem))]"
+                className="fixed inset-x-3 top-15 z-50 overflow-hidden rounded-xl border shadow-lg sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-99"
                 style={{
                   backgroundColor: "var(--color-surface)",
                   borderColor: "var(--color-border)",
                 }}
               >
-           
                 <div
                   className="flex items-center justify-between border-b px-4 py-3"
                   style={{ borderColor: "var(--color-border)" }}
@@ -602,21 +638,48 @@ export default function Topbar({
                     </p>
                   </div>
 
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleMarkAllRead()}
+                      disabled={notificationActionLoading}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-(--color-accent) transition hover:bg-(--color-accent-soft) disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {notificationActionLoading ? "Updating…" : "Mark all read"}
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  className="flex gap-1 border-b px-3 py-2"
+                  style={{ borderColor: "var(--color-border)" }}
+                >
                   <button
                     type="button"
-                    onClick={() => void handleMarkAllRead()}
-                    disabled={
-                      unreadCount === 0 || notificationActionLoading
-                    }
-                    className="rounded-md px-2 py-1 text-xs font-medium text-(--color-accent) transition hover:bg-(--color-accent-soft) disabled:cursor-not-allowed disabled:opacity-40"
+                    onClick={() => setNotificationFilter("all")}
+                    aria-pressed={notificationFilter === "all"}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                      notificationFilter === "all"
+                        ? "bg-(--color-accent-soft) text-(--color-accent)"
+                        : "text-(--color-text-secondary) hover:bg-(--color-bg)"
+                    }`}
                   >
-                    {notificationActionLoading
-                      ? "Updating…"
-                      : "Mark all read"}
+                    All ({notifications.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationFilter("unread")}
+                    aria-pressed={notificationFilter === "unread"}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                      notificationFilter === "unread"
+                        ? "bg-(--color-accent-soft) text-(--color-accent)"
+                        : "text-(--color-text-secondary) hover:bg-(--color-bg)"
+                    }`}
+                  >
+                    Unread ({unreadCount})
                   </button>
                 </div>
 
-                {/* Error */}
                 {notificationError && (
                   <div
                     role="alert"
@@ -627,100 +690,90 @@ export default function Topbar({
                   </div>
                 )}
 
-                {/* Notification list */}
-                <div className="max-h-[min(26rem,65vh)] overflow-y-auto">
-                  {notificationLoading ? (
-                    <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-(--color-text-secondary)">
-                      <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Loading notifications…
-                    </div>
-                  ) : notifications.length === 0 ? (
-                    <div className="px-5 py-10 text-center">
-                      <span className="mx-auto flex size-11 items-center justify-center rounded-full bg-(--color-accent-soft) text-(--color-text-secondary)">
-                        <BellIcon />
-                      </span>
-                      <p className="mt-3 text-sm font-medium">
-                        No notifications yet
-                      </p>
-                      <p className="mt-1 text-xs text-(--color-text-secondary)">
-                        Updates about your tickets will appear here.
-                      </p>
-                    </div>
-                  ) : (
-                    <ul>
-                      {notifications.map((notification) => {
-                        const isRead = Boolean(notification.is_read);
+                {notificationLoading ? (
+                  <div className="flex min-h-48 items-center justify-center gap-2 px-4 py-10 text-sm text-(--color-text-secondary)">
+                    <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Loading notifications…
+                  </div>
+                ) : visibleNotifications.length === 0 ? (
+                  <div className="flex min-h-48 flex-col items-center justify-center px-5 py-6 text-center">
+                    <img
+                      src={emptyStateIllustration}
+                      alt=""
+                      aria-hidden="true"
+                      className="mb-2 h-24 w-32 object-contain"
+                    />
+                    <p className="text-sm font-medium text-(--color-text)">
+                      {notificationFilter === "unread"
+                        ? "You're all caught up"
+                        : "No notifications yet"}
+                    </p>
+                    <p className="mt-1 text-xs text-(--color-text-secondary)">
+                      {notificationFilter === "unread"
+                        ? "You have no unread notifications"
+                        : "New updates will appear here"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="max-h-[min(26rem,65vh)] overflow-y-auto">
+                    {groupedNotifications.map((group) => (
+                      <section key={group.title}>
+                        <h3
+                          className="sticky top-0 border-b px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-(--color-text-secondary)"
+                          style={{
+                            backgroundColor: "var(--color-bg)",
+                            borderColor: "var(--color-border)",
+                          }}
+                        >
+                          {group.title}
+                        </h3>
+                        <ul>
+                          {group.items.map((notification) => {
+                            const isRead = Number(notification.is_read) === 1;
 
-                        return (
-                          <li key={notification.id}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void handleNotificationClick(notification)
-                              }
-                              className="flex w-full gap-3 border-b px-4 py-3 text-left transition last:border-b-0 hover:bg-(--color-accent-soft)"
-                              style={{
-                                borderColor: "var(--color-border)",
-                                backgroundColor: isRead
-                                  ? "transparent"
-                                  : "var(--color-accent-soft)",
-                              }}
-                            >
-                              <span className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-(--color-bg) text-(--color-accent)">
-                                {isRead ? (
-                                  <CheckIcon />
-                                ) : (
-                                  <BellIcon />
-                                )}
-                              </span>
-
-                              <span className="min-w-0 flex-1">
-                                <span className="flex items-start justify-between gap-2">
-                                  <span className="text-sm font-semibold">
-                                    {notification.title}
-                                  </span>
-
-                                  {!isRead && (
-                                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-(--color-accent)" />
-                                  )}
-                                </span>
-
-                                <span className="mt-1 block text-xs leading-relaxed text-(--color-text-secondary)">
-                                  {notification.message}
-                                </span>
-
-                                <span className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-(--color-text-secondary)">
-                                  {notification.ticket_code && (
-                                    <span className="font-semibold text-(--color-accent)">
-                                      {notification.ticket_code}
+                            return (
+                              <li key={notification.id}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    void handleNotificationClick(notification)
+                                  }
+                                  className="flex w-full gap-3 border-b px-4 py-3 text-left transition last:border-b-0 hover:bg-(--color-accent-soft) focus-visible:bg-(--color-accent-soft) focus-visible:outline-none"
+                                  style={{
+                                    borderColor: "var(--color-border)",
+                                    backgroundColor: isRead
+                                      ? "transparent"
+                                      : "var(--color-accent-soft)",
+                                  }}
+                                >
+                                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-(--color-accent)" style={{ opacity: isRead ? 0 : 1 }} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex items-start justify-between gap-2">
+                                      <span className={`text-sm ${isRead ? "font-medium" : "font-semibold"}`}>
+                                        {notification.title}
+                                      </span>
+                                      <span className="shrink-0 text-[10px] text-(--color-text-secondary)">
+                                        {formatTime(notification.created_at)}
+                                      </span>
                                     </span>
-                                  )}
-                                  <span>
-                                    {formatTime(notification.created_at)}
+                                    <span className="mt-1 block text-xs leading-relaxed text-(--color-text-secondary)">
+                                      {notification.message}
+                                    </span>
+                                    {notification.ticket_code && (
+                                      <span className="mt-2 block text-[10px] font-semibold text-(--color-accent)">
+                                        {notification.ticket_code}
+                                      </span>
+                                    )}
                                   </span>
-                                </span>
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div
-                  className="border-t px-4 py-2.5"
-                  style={{ borderColor: "var(--color-border)" }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => void loadNotifications(true)}
-                    className="w-full rounded-md py-1 text-xs font-medium text-(--color-text-secondary) transition hover:bg-(--color-accent-soft) hover:text-(--color-text)"
-                  >
-                    Refresh notifications
-                  </button>
-                </div>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </section>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

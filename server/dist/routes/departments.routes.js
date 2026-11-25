@@ -5,11 +5,11 @@ const auth_middleware_js_1 = require("../middleware/auth.middleware.js");
 const requireMaster_js_1 = require("../middleware/requireMaster.js");
 const departments_controller_js_1 = require("../controllers/departments.controller.js");
 const router = (0, express_1.Router)();
-// All department routes require authentication.
+// dept authentication.
 router.use(auth_middleware_js_1.requireAuth);
-// Department listing is available to authenticated users.
+// Dept listing for authenticated users.
 router.get('/', departments_controller_js_1.listDepartments);
-// Department management is Master Admin only.
+// Department management allowed for master user only.
 router.use(requireMaster_js_1.requireMaster);
 router.post('/', departments_controller_js_1.createDepartment);
 router.put('/:id', departments_controller_js_1.updateDepartment);

@@ -124,6 +124,7 @@ export default function EmployeesPage() {
   }, [])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData()
   }, [loadData])
 

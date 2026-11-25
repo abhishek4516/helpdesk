@@ -339,7 +339,7 @@ export default function Sidebar({
                 ].join(" ")}
               >
                 {isActive && (
-                  <span className="absolute top-2.5 bottom-2.5 left-0 w-[3px] rounded-full bg-(--color-accent)" />
+                  <span className="absolute top-2.5 bottom-2.5 left-0 w-0.75 rounded-full bg-(--color-accent)" />
                 )}
 
                 <NavIcon name={item.icon} />

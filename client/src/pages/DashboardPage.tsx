@@ -12,8 +12,6 @@ import DepartmentsPage from "./DepartmentsPage";
 import EmployeesPage from "./EmployeesPage";
 import TicketTransfersPage from "./TicketTransfersPage";
 
-
-
 interface DashboardPageProps {
   user: LoggedInUser;
   onLogout: () => void;
@@ -52,7 +50,6 @@ interface TicketResolution {
   submittedByName: string;
 }
 
-
 type Tone = "indigo" | "sky" | "amber" | "emerald" | "slate";
 type SortOrder = "newest" | "oldest";
 
@@ -68,22 +65,67 @@ const pageTitles: Record<string, string> = {
   departments: "Departments",
 };
 
-const toneStyles: Record<Tone, { bg: string; text: string; soft: string }> = {
-  indigo: { bg: "bg-indigo-600", text: "text-indigo-600", soft: "bg-indigo-500/10 text-indigo-500" },
-  sky: { bg: "bg-sky-500", text: "text-sky-600", soft: "bg-sky-500/10 text-sky-500" },
-  amber: { bg: "bg-amber-500", text: "text-amber-600", soft: "bg-amber-500/10 text-amber-500" },
-  emerald: { bg: "bg-emerald-500", text: "text-emerald-600", soft: "bg-emerald-500/10 text-emerald-500" },
-  slate: { bg: "bg-slate-500", text: "text-slate-600", soft: "bg-slate-500/10 text-slate-500" },
+// Full class strings are listed so Tailwind can detect them.
+const toneStyles: Record<
+  Tone,
+  { bg: string; text: string; soft: string; stroke: string; dot: string; badge: string }
+> = {
+  indigo: {
+    bg: "bg-indigo-600",
+    text: "text-indigo-600",
+    soft: "bg-indigo-500/10 text-indigo-500",
+    stroke: "stroke-indigo-500",
+    dot: "bg-indigo-500",
+    badge: "bg-(--color-accent-soft) text-(--color-accent-text)",
+  },
+  sky: {
+    bg: "bg-sky-500",
+    text: "text-sky-600",
+    soft: "bg-sky-500/10 text-sky-500",
+    stroke: "stroke-sky-500",
+    dot: "bg-sky-500",
+    badge: "bg-sky-500/10 text-sky-700",
+  },
+  amber: {
+    bg: "bg-amber-500",
+    text: "text-amber-600",
+    soft: "bg-amber-500/10 text-amber-500",
+    stroke: "stroke-amber-500",
+    dot: "bg-amber-500",
+    badge: "bg-(--color-warning-bg) text-(--color-warning-text)",
+  },
+  emerald: {
+    bg: "bg-emerald-500",
+    text: "text-emerald-600",
+    soft: "bg-emerald-500/10 text-emerald-500",
+    stroke: "stroke-emerald-500",
+    dot: "bg-emerald-500",
+    badge: "bg-(--color-success-bg) text-(--color-success-text)",
+  },
+  slate: {
+    bg: "bg-slate-500",
+    text: "text-slate-600",
+    soft: "bg-slate-500/10 text-slate-500",
+    stroke: "stroke-slate-500",
+    dot: "bg-slate-500",
+    badge: "bg-(--color-surface-secondary) text-(--color-text-secondary)",
+  },
 };
 
-
-const kanbanColumns: { title: string; tone: Tone; statuses: string[] }[] = [
+/**
+ * Single source of truth for ticket status groups.
+ * The Kanban board, the status filter and the overview chart all read from
+ * this list, so counts always match across the dashboard.
+ */
+const statusGroups: {
+  key: string;
+  title: string;
+  tone: Tone;
+  statuses: string[];
+}[] = [
+  { key: "new", title: "New", tone: "indigo", statuses: ["open"] },
   {
-    title: "New",
-    tone: "indigo",
-    statuses: ["open"],
-  },
-  {
+    key: "open",
     title: "Open",
     tone: "sky",
     statuses: [
@@ -97,6 +139,7 @@ const kanbanColumns: { title: string; tone: Tone; statuses: string[] }[] = [
     ],
   },
   {
+    key: "resolved",
     title: "Resolved",
     tone: "amber",
     statuses: [
@@ -106,20 +149,20 @@ const kanbanColumns: { title: string; tone: Tone; statuses: string[] }[] = [
       "resolved",
     ],
   },
-  {
-    title: "Closed",
-    tone: "emerald",
-    statuses: ["closed"],
-  },
+  { key: "closed", title: "Closed", tone: "emerald", statuses: ["closed"] },
 ];
 
 const statusOptions = [
   { value: "all", label: "All tickets" },
-  { value: "new", label: "New" },
-  { value: "open", label: "Open" },
-  { value: "completed", label: "Completed" },
+  ...statusGroups.map((group) => ({ value: group.key, label: group.title })),
 ];
 
+function toneForStatus(status: string): Tone {
+  return (
+    statusGroups.find((group) => group.statuses.includes(status))?.tone ??
+    "slate"
+  );
+}
 
 const avatarColors = [
   "bg-indigo-500",
@@ -143,6 +186,13 @@ const linkButton = `rounded text-sm font-medium text-(--color-accent) transition
 const fieldClass =
   "h-10 w-full rounded-xl border border-(--color-border) bg-(--color-surface) px-3 text-base text-(--color-text) outline-none transition placeholder:text-(--color-text-secondary) focus:border-(--color-accent) disabled:opacity-60 sm:text-sm";
 
+const compactSelectClass =
+  "h-9 rounded-xl border border-(--color-border) bg-(--color-surface) px-2.5 text-base text-(--color-text) outline-none focus:border-(--color-accent) sm:text-xs";
+
+// text-base on mobile prevents iOS zoom-on-focus
+const textareaClass =
+  "w-full rounded-xl border border-(--color-border) bg-(--color-surface) p-3 text-base text-(--color-text) outline-none transition placeholder:text-(--color-text-secondary) focus:border-(--color-accent) disabled:opacity-60 sm:text-sm";
+
 const cardClass =
   "rounded-2xl border border-(--color-border) bg-(--color-surface) shadow-[0_2px_12px_rgba(15,23,42,0.06)]";
 
@@ -164,6 +214,22 @@ function formatDate(date: string) {
     day: "numeric",
     month: "short",
     year: "numeric",
+  });
+}
+
+function formatDateTime(value: unknown, fallback = "Time unavailable") {
+  if (value == null || value === "") return fallback;
+
+  const parsed = new Date(String(value));
+
+  if (Number.isNaN(parsed.getTime())) return fallback;
+
+  return parsed.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -228,19 +294,6 @@ function readLifecycleEvent(event: TicketLifecycleEvent, index: number) {
     record.event_at ??
     record.timestamp;
 
-  const parsedTimestamp = timestamp ? new Date(String(timestamp)) : null;
-
-  const dateLabel =
-    parsedTimestamp && !Number.isNaN(parsedTimestamp.getTime())
-      ? parsedTimestamp.toLocaleString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-        })
-      : "Time unavailable";
-
   return {
     key: String(
       record.id ?? record.eventId ?? record.event_id ?? `${rawType}-${index}`,
@@ -248,7 +301,7 @@ function readLifecycleEvent(event: TicketLifecycleEvent, index: number) {
     heading,
     description: description == null ? "" : String(description).trim(),
     actor: actor == null ? "" : String(actor).trim(),
-    dateLabel,
+    dateLabel: formatDateTime(timestamp),
   };
 }
 
@@ -257,15 +310,47 @@ function readLifecycleEvent(event: TicketLifecycleEvent, index: number) {
 /* -------------------------------------------------------------------------- */
 
 const iconPaths = {
-  search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>,
+  search: (
+    <>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4 4" />
+    </>
+  ),
   plus: <path d="M12 5v14M5 12h14" />,
-  ticket: <><path d="M3 9a2 2 0 0 0 0 6v2a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-2a2 2 0 0 1 0-6V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1Z" /><path d="M14 6v12" strokeDasharray="2 3" /></>,
-  clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  ticket: (
+    <>
+      <path d="M3 9a2 2 0 0 0 0 6v2a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-2a2 2 0 0 1 0-6V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1Z" />
+      <path d="M14 6v12" strokeDasharray="2 3" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
   trend: <path d="m4 17 5-5 4 4 7-8M15 8h5v5" />,
-  check: <><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" /></>,
-  user: <><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 4-6 8-6s8 2 8 6" /></>,
-  building: <path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M14 10h5a1 1 0 0 1 1 1v10M3 21h18M8 8h2M8 12h2M8 16h2" />,
-  calendar: <><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M4 10h16M9 3v4M15 3v4" /></>,
+  check: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.5 2.5 4.5-5" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 4-6 8-6s8 2 8 6" />
+    </>
+  ),
+  building: (
+    <path d="M4 21V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16M14 10h5a1 1 0 0 1 1 1v10M3 21h18M8 8h2M8 12h2M8 16h2" />
+  ),
+  calendar: (
+    <>
+      <rect x="4" y="5" width="16" height="15" rx="2" />
+      <path d="M4 10h16M9 3v4M15 3v4" />
+    </>
+  ),
   arrow: <path d="M5 12h14m-6-6 6 6-6 6" />,
   back: <path d="M19 12H5m6-6-6 6 6 6" />,
   chevron: <path d="m9 6 6 6-6 6" />,
@@ -306,13 +391,42 @@ function PlusIcon() {
   return <Icon name="plus" className="size-4" />;
 }
 
+function Spinner() {
+  return (
+    <span
+      className="size-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+      aria-hidden="true"
+    />
+  );
+}
+
+function LoadingRow({
+  children,
+  className = "py-8",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-3 text-sm text-(--color-text-secondary) ${className}`}
+    >
+      <Spinner />
+      {children}
+    </div>
+  );
+}
+
 function Avatar({ name, large = false }: { name: string; large?: boolean }) {
   const label = name.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <span
       title={name || "Unknown"}
-      className={`flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${large ? "size-9 text-xs" : "size-7 text-[11px]"} ${avatarColor(name)}`}
+      className={`flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${
+        large ? "size-9 text-xs" : "size-7 text-[11px]"
+      } ${avatarColor(name)}`}
     >
       {label}
     </span>
@@ -320,43 +434,11 @@ function Avatar({ name, large = false }: { name: string; large?: boolean }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  let background = "var(--color-surface-secondary)";
-  let color = "var(--color-text-secondary)";
-
- 
-switch (status) {
-  case "open":
-    background = "var(--color-accent-soft)";
-    color = "var(--color-accent-text)";
-    break;
-
-  case "assigned":
-  case "in_progress":
-  case "forwarding_requested":
-  case "transfer_pending":
-    background = "var(--color-warning-bg)";
-    color = "var(--color-warning-text)";
-    break;
-
-  case "pending_approval":
-  case "resolution_submitted":
-  case "resolution_pending":
-  case "resolved":
-    background = "var(--color-warning-bg)";
-    color = "var(--color-warning-text)";
-    break;
-
-  case "closed":
-    background = "var(--color-success-bg)";
-    color = "var(--color-success-text)";
-    break;
-}
-
-
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize"
-      style={{ backgroundColor: background, color }}
+      className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-[11px] font-medium capitalize ${
+        toneStyles[toneForStatus(status)].badge
+      }`}
     >
       {formatStatus(status)}
     </span>
@@ -487,7 +569,7 @@ function CardHeader({
       <div className="flex min-w-0 items-center gap-3">
         {icon && (
           <span className={chipClass}>
-            <Icon name={icon} className="size-[18px]" />
+            <Icon name={icon} className="size-4.5" />
           </span>
         )}
         <div className="min-w-0">
@@ -518,7 +600,7 @@ function TicketRow({
       type="button"
       onClick={onClick}
       aria-label={`View ticket ${ticket.ticketCode}: ${ticket.title}`}
-      className="flex w-full min-w-0 items-center gap-3 border-b border-(--color-border) px-5 py-4 text-left transition-colors last:border-b-0 hover:bg-(--color-accent-soft) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-accent)"
+      className="flex w-full min-w-0 items-center gap-3 border-b border-(--color-border) px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-(--color-accent-soft) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--color-accent) sm:px-5"
     >
       <Avatar name={ticket.requesterName || ""} large />
 
@@ -561,24 +643,24 @@ function KanbanBoard({
   onCreate: () => void;
 }) {
   return (
-    <div className="w-full overflow-x-auto pb-4">
-  <div className="grid w-full min-w-[900px] grid-cols-4 items-start gap-4">
-        {kanbanColumns.map((column) => {
+    <div className="-mx-3 overflow-x-auto px-3 pb-4 sm:mx-0 sm:px-0">
+      <div className="flex snap-x snap-mandatory items-start gap-4 lg:grid lg:snap-none lg:grid-cols-4">
+        {statusGroups.map((column) => {
           const columnTickets = tickets.filter((ticket) =>
             column.statuses.includes(ticket.status),
           );
 
           return (
             <section
-              key={column.title}
+              key={column.key}
               aria-label={`${column.title} tickets`}
-              className="min-w-0 space-y-3"
+              className="w-[78vw] max-w-xs min-w-0 shrink-0 snap-start space-y-3 lg:w-auto lg:max-w-none"
             >
               <ColumnHeader
                 title={column.title}
                 count={columnTickets.length}
                 tone={column.tone}
-                onAdd={column.title === "New" ? onCreate : undefined}
+                onAdd={column.key === "new" ? onCreate : undefined}
               />
 
               {columnTickets.map((ticket) => (
@@ -595,7 +677,7 @@ function KanbanBoard({
                     </span>
                   </div>
 
-                  <p className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-(--color-text)">
+                  <p className="mt-3 line-clamp-2 text-sm leading-5 font-semibold text-(--color-text)">
                     {ticket.title}
                   </p>
 
@@ -627,7 +709,6 @@ function KanbanBoard({
                 </p>
               )}
             </section>
-            
           );
         })}
       </div>
@@ -647,7 +728,7 @@ function Timeline({ events }: { events: TicketLifecycleEvent[] }) {
               className="absolute top-1.5 -left-6.25 size-2 rounded-full bg-(--color-accent)"
               aria-hidden="true"
             />
-            <p className="text-[13px] font-semibold capitalize text-(--color-text)">
+            <p className="text-[13px] font-semibold text-(--color-text) capitalize">
               {item.heading}
             </p>
             <p className="mt-0.5 text-xs text-(--color-text-secondary)">
@@ -655,7 +736,7 @@ function Timeline({ events }: { events: TicketLifecycleEvent[] }) {
               {item.actor ? `, by ${item.actor}` : ""}
             </p>
             {item.description && (
-              <p className="mt-1 whitespace-pre-wrap wrap-break-word text-xs leading-5 text-(--color-text-secondary)">
+              <p className="mt-1 text-xs leading-5 wrap-break-word whitespace-pre-wrap text-(--color-text-secondary)">
                 {item.description}
               </p>
             )}
@@ -663,6 +744,33 @@ function Timeline({ events }: { events: TicketLifecycleEvent[] }) {
         );
       })}
     </ol>
+  );
+}
+
+function CommentItem({ comment }: { comment: TicketComment }) {
+  return (
+    <article className="rounded-xl bg-(--color-surface-secondary) p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Avatar name={comment.userName || "User"} />
+          <span className="truncate text-sm font-semibold text-(--color-text)">
+            {comment.userName || "User"}
+          </span>
+          <span className="text-xs text-(--color-text-secondary) capitalize">
+            {String(comment.userRole || "").replaceAll("_", " ")}
+          </span>
+        </div>
+        <time
+          dateTime={comment.createdAt}
+          className="text-xs text-(--color-text-secondary)"
+        >
+          {formatDateTime(comment.createdAt, "Time unavailable")}
+        </time>
+      </div>
+      <p className="mt-2 text-xs leading-5 wrap-break-word whitespace-pre-wrap text-(--color-text-secondary)">
+        {comment.comment}
+      </p>
+    </article>
   );
 }
 
@@ -710,6 +818,7 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   const [successMessage, setSuccessMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [departmentFilter, setDepartmentFilter] = useState("all"); // NEW: Department Filter
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [ticketView, setTicketView] = useState<"list" | "kanban">("kanban");
 
@@ -720,17 +829,19 @@ export default function DashboardPage({ user, onLogout }: DashboardPageProps) {
   const [assignmentEmployeeId, setAssignmentEmployeeId] = useState("");
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [assignmentError, setAssignmentError] = useState("");
-const [ticketComments, setTicketComments] = useState<TicketComment[]>([]);
-const [pendingResolution, setPendingResolution] =
-  useState<TicketResolution | null>(null);
 
-const [commentDraft, setCommentDraft] = useState("");
-const [resolutionDraft, setResolutionDraft] = useState("");
-const [reviewDraft, setReviewDraft] = useState("");
+  const [ticketComments, setTicketComments] = useState<TicketComment[]>([]);
+  const [pendingResolution, setPendingResolution] =
+    useState<TicketResolution | null>(null);
 
-const [loadingWorkflow, setLoadingWorkflow] = useState(false);
-const [savingWorkflow, setSavingWorkflow] = useState(false);
-const [workflowError, setWorkflowError] = useState("");
+  const [commentDraft, setCommentDraft] = useState("");
+  const [resolutionDraft, setResolutionDraft] = useState("");
+  const [reviewDraft, setReviewDraft] = useState("");
+
+  const [loadingWorkflow, setLoadingWorkflow] = useState(false);
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
+  const [workflowError, setWorkflowError] = useState("");
+
   const canManageAssignments =
     user.role === "master" || user.role === "department_head";
 
@@ -770,43 +881,47 @@ const [workflowError, setWorkflowError] = useState("");
       setLoadingLifecycle(false);
     }
   }, []);
-async function loadTicketWorkflow(ticketId: number) {
-  setLoadingWorkflow(true);
-  setWorkflowError("");
 
-  try {
-    const [commentsResponse, resolutionResponse] = await Promise.all([
-      fetch(`http://localhost:5000/api/tickets/${ticketId}/comments`, {
-        credentials: "include",
-      }),
-      fetch(`http://localhost:5000/api/tickets/${ticketId}/resolution`, {
-        credentials: "include",
-      }),
-    ]);
+  async function loadTicketWorkflow(ticketId: number) {
+    setLoadingWorkflow(true);
+    setWorkflowError("");
 
-    const commentsData = await commentsResponse.json();
-    const resolutionData = await resolutionResponse.json();
+    try {
+      const [commentsResponse, resolutionResponse] = await Promise.all([
+        fetch(`http://localhost:5000/api/tickets/${ticketId}/comments`, {
+          credentials: "include",
+        }),
+        fetch(`http://localhost:5000/api/tickets/${ticketId}/resolution`, {
+          credentials: "include",
+        }),
+      ]);
 
-    if (!commentsResponse.ok || !commentsData.success) {
-      throw new Error(commentsData.message || "Unable to load comments.");
-    }
+      const commentsData = await commentsResponse.json();
+      const resolutionData = await resolutionResponse.json();
 
-    if (!resolutionResponse.ok || !resolutionData.success) {
-      throw new Error(
-        resolutionData.message || "Unable to load resolution.",
+      if (!commentsResponse.ok || !commentsData.success) {
+        throw new Error(commentsData.message || "Unable to load comments.");
+      }
+
+      if (!resolutionResponse.ok || !resolutionData.success) {
+        throw new Error(
+          resolutionData.message || "Unable to load resolution.",
+        );
+      }
+
+      setTicketComments(commentsData.comments || []);
+      setPendingResolution(resolutionData.resolution || null);
+    } catch (error) {
+      setWorkflowError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load ticket activity.",
       );
+    } finally {
+      setLoadingWorkflow(false);
     }
-
-    setTicketComments(commentsData.comments || []);
-    setPendingResolution(resolutionData.resolution || null);
-  } catch (error) {
-    setWorkflowError(
-      error instanceof Error ? error.message : "Unable to load ticket activity.",
-    );
-  } finally {
-    setLoadingWorkflow(false);
   }
-}
+
   const loadAssignableEmployees = useCallback(async () => {
     if (user.role !== "master" && user.role !== "department_head") return;
 
@@ -877,73 +992,72 @@ async function loadTicketWorkflow(ticketId: number) {
 
   /* ------------------------------ Derived data ----------------------------- */
 
+  // NEW: Calculate department stats at the top level to avoid hook rule violations
+  const departmentStats = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; open: number; resolved: number }>();
+    
+    tickets.forEach((ticket) => {
+      const dept = ticket.departmentName || "Unassigned";
+      if (!map.has(dept)) {
+        map.set(dept, { name: dept, total: 0, open: 0, resolved: 0 });
+      }
+      const stat = map.get(dept)!;
+      stat.total += 1;
+      
+      const openStatuses = statusGroups.find(g => g.key === "open")?.statuses || [];
+      const resolvedStatuses = statusGroups.find(g => g.key === "resolved")?.statuses || [];
+      
+      if (openStatuses.includes(ticket.status)) stat.open += 1;
+      if (resolvedStatuses.includes(ticket.status)) stat.resolved += 1;
+    });
 
-const filteredTickets = useMemo(() => {
-  const query = searchQuery.trim().toLowerCase();
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [tickets]);
 
-  const matches = tickets.filter((ticket) => {
-    const matchesSearch =
-      !query ||
-      [
-        ticket.ticketCode,
-        ticket.title,
-        ticket.description,
-        ticket.departmentName,
-        ticket.requesterName,
-      ].some((value) => value?.toLowerCase().includes(query));
+  // Get unique departments for the filter dropdown
+  const uniqueDepartments = useMemo(() => {
+    return Array.from(new Set(tickets.map(t => t.departmentName || "Unassigned"))).sort();
+  }, [tickets]);
 
-    const newStatuses = ["open"];
+  const filteredTickets = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const activeGroup = statusGroups.find((group) => group.key === statusFilter);
 
-    const openStatuses = [
-      "assigned",
-      "in_progress",
-      "reopened",
-      "forwarding_requested",
-      "transfer_pending",
-      "approved",
-      "rejected",
-    ];
+    const matches = tickets.filter((ticket) => {
+      const matchesSearch =
+        !query ||
+        [
+          ticket.ticketCode,
+          ticket.title,
+          ticket.description,
+          ticket.departmentName,
+          ticket.requesterName,
+        ].some((value) => value?.toLowerCase().includes(query));
 
-    const completedStatuses = [
-      "pending_approval",
-      "resolution_submitted",
-      "resolution_pending",
-      "resolved",
-      "closed",
-    ];
+      const matchesStatus =
+        statusFilter === "all" ||
+        Boolean(activeGroup?.statuses.includes(ticket.status));
 
-    const matchesStatus =
-      statusFilter === "all" ||
-      (statusFilter === "new" && newStatuses.includes(ticket.status)) ||
-      (statusFilter === "open" && openStatuses.includes(ticket.status)) ||
-      (statusFilter === "completed" &&
-        completedStatuses.includes(ticket.status));
+      // NEW: Department filter matching
+      const matchesDepartment = 
+        departmentFilter === "all" || 
+        (ticket.departmentName || "Unassigned") === departmentFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus && matchesDepartment;
+    });
 
-  const time = (ticket: Ticket) => {
-    const value = new Date(ticket.createdAt).getTime();
-    return Number.isNaN(value) ? 0 : value;
-  };
+    const time = (ticket: Ticket) => {
+      const value = new Date(ticket.createdAt).getTime();
+      return Number.isNaN(value) ? 0 : value;
+    };
 
-  return [...matches].sort((a, b) =>
-    sortOrder === "newest" ? time(b) - time(a) : time(a) - time(b),
-  );
-}, [tickets, searchQuery, statusFilter, sortOrder]);
+    return [...matches].sort((a, b) =>
+      sortOrder === "newest" ? time(b) - time(a) : time(a) - time(b),
+    );
+  }, [tickets, searchQuery, statusFilter, sortOrder, departmentFilter]); // Added departmentFilter
 
-
-  const openCount = tickets.filter((ticket) => ticket.status === "open").length;
-
-  const inProgressCount = tickets.filter((ticket) =>
-    ["assigned", "in_progress", "forwarding_requested"].includes(ticket.status),
-  ).length;
-
-  const closedCount = tickets.filter(
-    (ticket) => ticket.status === "closed",
-  ).length;
-
-  const hasFilters = Boolean(searchQuery.trim()) || statusFilter !== "all";
+  // UPDATED: Include departmentFilter in hasFilters
+  const hasFilters = Boolean(searchQuery.trim()) || statusFilter !== "all" || departmentFilter !== "all";
   const showRequester = user.role !== "employee";
 
   /* -------------------------------- Actions -------------------------------- */
@@ -976,9 +1090,9 @@ const filteredTickets = useMemo(() => {
     setSelectedTicket(ticket);
     void loadTicketLifecycle(ticket.id);
     void loadTicketWorkflow(ticket.id);
-setCommentDraft("");
-setResolutionDraft("");
-setReviewDraft("");
+    setCommentDraft("");
+    setResolutionDraft("");
+    setReviewDraft("");
     setActivePage("tickets");
   }
 
@@ -1039,91 +1153,92 @@ setReviewDraft("");
       setSavingAssignment(false);
     }
   }
-async function handleWorkflowAction(
-  endpoint: string,
-  method: "POST" | "PATCH",
-  body: Record<string, unknown>,
-  successText: string,
-) {
-  if (!selectedTicket) return;
 
-  setSavingWorkflow(true);
-  setWorkflowError("");
-  setSuccessMessage("");
+  async function handleWorkflowAction(
+    endpoint: string,
+    method: "POST" | "PATCH",
+    body: Record<string, unknown>,
+    successText: string,
+  ) {
+    if (!selectedTicket) return;
 
-  try {
-    const response = await fetch(
-      `http://localhost:5000/api/tickets/${selectedTicket.id}${endpoint}`,
-      {
-        method,
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
+    setSavingWorkflow(true);
+    setWorkflowError("");
+    setSuccessMessage("");
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || "Unable to update this ticket.");
-    }
-
-    setSuccessMessage(successText);
-
-    if (endpoint === "/comments") {
-      setCommentDraft("");
-    }
-
-    if (endpoint === "/resolution") {
-      setResolutionDraft("");
-      setSelectedTicket((current) =>
-        current ? { ...current, status: "resolution_pending" } : current,
-      );
-    }
-
-    if (endpoint.includes("/review")) {
-      const nextStatus = body.decision === "approved" ? "closed" : "open";
-
-      setSelectedTicket((current) =>
-        current
-          ? {
-              ...current,
-              status: nextStatus,
-              assignedEmployeeId:
-                body.decision === "rejected"
-                  ? null
-                  : (current as TicketWithAssignment).assignedEmployeeId,
-            }
-          : current,
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/tickets/${selectedTicket.id}${endpoint}`,
+        {
+          method,
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
       );
 
-      setReviewDraft("");
-    }
+      const data = await response.json();
 
-    await Promise.all([
-      loadTicketWorkflow(selectedTicket.id),
-      loadTicketLifecycle(selectedTicket.id),
-      loadTickets(),
-    ]);
-  } catch (error) {
-    setWorkflowError(
-      error instanceof Error ? error.message : "Unable to update this ticket.",
-    );
-  } finally {
-    setSavingWorkflow(false);
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to update this ticket.");
+      }
+
+      setSuccessMessage(successText);
+
+      if (endpoint === "/comments") {
+        setCommentDraft("");
+      }
+
+      if (endpoint === "/resolution") {
+        setResolutionDraft("");
+        setSelectedTicket((current) =>
+          current ? { ...current, status: "resolution_pending" } : current,
+        );
+      }
+
+      if (endpoint.includes("/review")) {
+        const nextStatus = body.decision === "approved" ? "closed" : "open";
+
+        setSelectedTicket((current) =>
+          current
+            ? {
+                ...current,
+                status: nextStatus,
+                assignedEmployeeId:
+                  body.decision === "rejected"
+                    ? null
+                    : (current as TicketWithAssignment).assignedEmployeeId,
+              }
+            : current,
+        );
+
+        setReviewDraft("");
+      }
+
+      await Promise.all([
+        loadTicketWorkflow(selectedTicket.id),
+        loadTicketLifecycle(selectedTicket.id),
+        loadTickets(),
+      ]);
+    } catch (error) {
+      setWorkflowError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update this ticket.",
+      );
+    } finally {
+      setSavingWorkflow(false);
+    }
   }
-}
+
   /* ------------------------------- Renderers ------------------------------- */
 
   function renderTicketList(items: Ticket[]) {
     if (loadingTickets) {
       return (
-        <div
-          className={`flex items-center justify-center gap-3 px-4 py-12 text-sm text-(--color-text-secondary) ${cardClass}`}
-        >
-          <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <LoadingRow className={`justify-center px-4 py-12 ${cardClass}`}>
           Loading tickets…
-        </div>
+        </LoadingRow>
       );
     }
 
@@ -1150,13 +1265,14 @@ async function handleWorkflowAction(
           {hasFilters ? (
             <EmptyState
               title="No matching tickets"
-              message="Try a different search or change the status filter."
+              message="Try a different search or change the filters."
               action={
                 <button
                   type="button"
                   onClick={() => {
                     setSearchQuery("");
                     setStatusFilter("all");
+                    setDepartmentFilter("all"); // Clear department filter
                   }}
                   className={secondaryButton}
                 >
@@ -1233,22 +1349,26 @@ async function handleWorkflowAction(
 
     const canAssign =
       canManageAssignments && ticket.status === "open" && !assignedId;
+
     const workflowTicket = ticket as TicketWithAssignment;
     const isAssignedEmployee =
       user.role === "employee" && assignedId === user.id;
     const isRequester = workflowTicket.requesterUserId === user.id;
+
     const canComment = ![
       "closed",
       "transfer_pending",
       "resolution_pending",
     ].includes(ticket.status);
+
     const canSubmitResolution =
-      isAssignedEmployee &&
-      ["assigned", "in_progress"].includes(ticket.status);
+      isAssignedEmployee && ["assigned", "in_progress"].includes(ticket.status);
+
     const canReviewResolution =
       isRequester &&
       ticket.status === "resolution_pending" &&
       pendingResolution?.status === "pending";
+
     return (
       <div className="space-y-3">
         <button
@@ -1291,7 +1411,7 @@ async function handleWorkflowAction(
             </div>
 
             {canAssign ? (
-              <div className="w-full max-w-md rounded-xl border border-(--color-accent)/30 bg-(--color-accent-soft)/40 p-3 sm:w-auto sm:min-w-[340px]">
+              <div className="w-full rounded-xl border border-(--color-accent)/30 bg-(--color-accent-soft)/40 p-3 sm:w-auto sm:max-w-md sm:min-w-85">
                 <label
                   htmlFor="assign-employee"
                   className="mb-2 block text-xs font-semibold text-(--color-text)"
@@ -1363,7 +1483,9 @@ async function handleWorkflowAction(
         <div className="grid items-start gap-3 xl:h-[calc(100vh-220px)] xl:min-h-0 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)_280px] xl:overflow-hidden">
           {/* Main content */}
           <div className="contents">
-            <section className={`min-w-0 ${cardClass} xl:min-h-0 xl:overflow-y-auto`}>
+            <section
+              className={`min-w-0 ${cardClass} xl:min-h-0 xl:overflow-y-auto`}
+            >
               <CardHeader
                 icon="activity"
                 title="Activity timeline"
@@ -1382,10 +1504,7 @@ async function handleWorkflowAction(
 
               <div className="p-3 sm:p-4">
                 {loadingLifecycle ? (
-                  <div className="flex items-center gap-3 py-8 text-sm text-(--color-text-secondary)">
-                    <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Loading activity…
-                  </div>
+                  <LoadingRow>Loading activity…</LoadingRow>
                 ) : lifecycleError ? (
                   <div role="alert" className="space-y-3 py-2">
                     <p className="text-sm text-(--color-danger-text)">
@@ -1413,7 +1532,10 @@ async function handleWorkflowAction(
                 )}
               </div>
             </section>
-            <section className={`min-w-0 ${cardClass} xl:min-h-0 xl:overflow-y-auto`}>
+
+            <section
+              className={`min-w-0 ${cardClass} xl:min-h-0 xl:overflow-y-auto`}
+            >
               <CardHeader
                 icon="text"
                 title="Comments & resolution"
@@ -1434,10 +1556,9 @@ async function handleWorkflowAction(
                 {workflowError && <Notice tone="error">{workflowError}</Notice>}
 
                 {loadingWorkflow ? (
-                  <div className="flex items-center gap-3 py-5 text-sm text-(--color-text-secondary)">
-                    <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <LoadingRow className="py-5">
                     Loading comments and resolution…
-                  </div>
+                  </LoadingRow>
                 ) : ticketComments.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-(--color-border) px-4 py-6 text-center text-sm text-(--color-text-secondary)">
                     No comments yet.
@@ -1445,31 +1566,7 @@ async function handleWorkflowAction(
                 ) : (
                   <div className="space-y-2">
                     {ticketComments.map((comment) => (
-                      <article key={comment.id} className="rounded-xl bg-(--color-surface-secondary) p-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <Avatar name={comment.userName || "User"} />
-                            <span className="text-sm font-semibold text-(--color-text)">
-                              {comment.userName || "User"}
-                            </span>
-                            <span className="text-xs capitalize text-(--color-text-secondary)">
-                              {String(comment.userRole || "").replaceAll("_", " ")}
-                            </span>
-                          </div>
-                          <time className="text-xs text-(--color-text-secondary)">
-                            {new Date(comment.createdAt).toLocaleString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </time>
-                        </div>
-                        <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-5 text-(--color-text-secondary)">
-                          {comment.comment}
-                        </p>
-                      </article>
+                      <CommentItem key={comment.id} comment={comment} />
                     ))}
                   </div>
                 )}
@@ -1489,7 +1586,10 @@ async function handleWorkflowAction(
                       }
                     }}
                   >
-                    <label htmlFor="ticket-comment" className="block text-sm font-semibold text-(--color-text)">
+                    <label
+                      htmlFor="ticket-comment"
+                      className="block text-sm font-semibold text-(--color-text)"
+                    >
                       Add a comment
                     </label>
                     <textarea
@@ -1500,10 +1600,14 @@ async function handleWorkflowAction(
                       maxLength={10000}
                       placeholder="Write a work update or comment…"
                       disabled={savingWorkflow}
-                      className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) p-3 text-sm text-(--color-text) outline-none focus:border-(--color-accent) disabled:opacity-60"
+                      className={textareaClass}
                     />
                     <div className="flex justify-end">
-                      <button type="submit" disabled={!commentDraft.trim() || savingWorkflow} className={primaryButton}>
+                      <button
+                        type="submit"
+                        disabled={!commentDraft.trim() || savingWorkflow}
+                        className={`${primaryButton} w-full sm:w-auto`}
+                      >
                         {savingWorkflow ? "Sending…" : "Add comment"}
                       </button>
                     </div>
@@ -1513,14 +1617,18 @@ async function handleWorkflowAction(
                 {pendingResolution && (
                   <div className="space-y-3 rounded-xl border border-(--color-border) p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h4 className="text-sm font-semibold text-(--color-text)">Submitted resolution</h4>
+                      <h4 className="text-sm font-semibold text-(--color-text)">
+                        Submitted resolution
+                      </h4>
                       <StatusBadge status={pendingResolution.status} />
                     </div>
-                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-(--color-text-secondary)">
+                    <p className="text-sm leading-6 wrap-break-word whitespace-pre-wrap text-(--color-text-secondary)">
                       {pendingResolution.resolutionComment}
                     </p>
                     <p className="text-xs text-(--color-text-secondary)">
-                      Submitted by {pendingResolution.submittedByName || "Assigned employee"} · {new Date(pendingResolution.createdAt).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })}
+                      Submitted by{" "}
+                      {pendingResolution.submittedByName || "Assigned employee"}{" "}
+                      on {formatDateTime(pendingResolution.createdAt)}
                     </p>
                   </div>
                 )}
@@ -1540,22 +1648,33 @@ async function handleWorkflowAction(
                       }
                     }}
                   >
-                    <label htmlFor="ticket-resolution" className="block text-sm font-semibold text-(--color-text)">
+                    <label
+                      htmlFor="ticket-resolution"
+                      className="block text-sm font-semibold text-(--color-text)"
+                    >
                       Submit resolution
                     </label>
                     <textarea
                       id="ticket-resolution"
                       value={resolutionDraft}
-                      onChange={(event) => setResolutionDraft(event.target.value)}
+                      onChange={(event) =>
+                        setResolutionDraft(event.target.value)
+                      }
                       rows={2}
                       minLength={5}
                       maxLength={10000}
                       placeholder="Describe the work completed and how the issue was resolved…"
                       disabled={savingWorkflow}
-                      className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) p-3 text-sm text-(--color-text) outline-none focus:border-(--color-accent) disabled:opacity-60"
+                      className={textareaClass}
                     />
                     <div className="flex justify-end">
-                      <button type="submit" disabled={resolutionDraft.trim().length < 5 || savingWorkflow} className={primaryButton}>
+                      <button
+                        type="submit"
+                        disabled={
+                          resolutionDraft.trim().length < 5 || savingWorkflow
+                        }
+                        className={`${primaryButton} w-full sm:w-auto`}
+                      >
                         {savingWorkflow ? "Submitting…" : "Submit for approval"}
                       </button>
                     </div>
@@ -1565,12 +1684,18 @@ async function handleWorkflowAction(
                 {canReviewResolution && pendingResolution && (
                   <div className="space-y-3 border-t border-(--color-border) pt-5">
                     <div>
-                      <h4 className="text-sm font-semibold text-(--color-text)">Review resolution</h4>
+                      <h4 className="text-sm font-semibold text-(--color-text)">
+                        Review resolution
+                      </h4>
                       <p className="mt-1 text-xs text-(--color-text-secondary)">
-                        Approve to close the ticket, or reject to return it to the department head for reassignment.
+                        Approve to close the ticket, or reject to return it to
+                        the department head for reassignment.
                       </p>
                     </div>
-                    <label htmlFor="resolution-review" className="block text-xs font-medium text-(--color-text-secondary)">
+                    <label
+                      htmlFor="resolution-review"
+                      className="block text-xs font-medium text-(--color-text-secondary)"
+                    >
                       Review note (optional)
                     </label>
                     <textarea
@@ -1581,18 +1706,23 @@ async function handleWorkflowAction(
                       maxLength={10000}
                       placeholder="Add a note for the employee or department head…"
                       disabled={savingWorkflow}
-                      className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) p-3 text-sm text-(--color-text) outline-none focus:border-(--color-accent) disabled:opacity-60"
+                      className={textareaClass}
                     />
-                    <div className="flex flex-wrap justify-end gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                       <button
                         type="button"
                         disabled={savingWorkflow}
-                        onClick={() => void handleWorkflowAction(
-                          `/resolution/${pendingResolution.id}/review`,
-                          "PATCH",
-                          { decision: "rejected", reviewComment: reviewDraft.trim() || null },
-                          "Resolution rejected. Ticket returned to the department head.",
-                        )}
+                        onClick={() =>
+                          void handleWorkflowAction(
+                            `/resolution/${pendingResolution.id}/review`,
+                            "PATCH",
+                            {
+                              decision: "rejected",
+                              reviewComment: reviewDraft.trim() || null,
+                            },
+                            "Resolution rejected. Ticket returned to the department head.",
+                          )
+                        }
                         className={secondaryButton}
                       >
                         {savingWorkflow ? "Saving…" : "Reject resolution"}
@@ -1600,12 +1730,17 @@ async function handleWorkflowAction(
                       <button
                         type="button"
                         disabled={savingWorkflow}
-                        onClick={() => void handleWorkflowAction(
-                          `/resolution/${pendingResolution.id}/review`,
-                          "PATCH",
-                          { decision: "approved", reviewComment: reviewDraft.trim() || null },
-                          "Resolution approved. Ticket closed.",
-                        )}
+                        onClick={() =>
+                          void handleWorkflowAction(
+                            `/resolution/${pendingResolution.id}/review`,
+                            "PATCH",
+                            {
+                              decision: "approved",
+                              reviewComment: reviewDraft.trim() || null,
+                            },
+                            "Resolution approved. Ticket closed.",
+                          )
+                        }
                         className={primaryButton}
                       >
                         {savingWorkflow ? "Saving…" : "Approve & close"}
@@ -1615,8 +1750,6 @@ async function handleWorkflowAction(
                 )}
               </div>
             </section>
-
-
           </div>
 
           {/* Sidebar */}
@@ -1650,19 +1783,30 @@ async function handleWorkflowAction(
               </div>
             </section>
 
-                        <details className={`${cardClass} group overflow-hidden`}>
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+            <details className={`${cardClass} group overflow-hidden`}>
+              <summary
+                className={`flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 ${focusRing} [&::-webkit-details-marker]:hidden`}
+              >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className={chipClass}><Icon name="text" className="size-4" /></span>
+                  <span className={chipClass}>
+                    <Icon name="text" className="size-4" />
+                  </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-(--color-text)">Description</span>
-                    <span className="mt-0.5 block text-xs text-(--color-text-secondary)">Details provided with this support request</span>
+                    <span className="block text-sm font-semibold text-(--color-text)">
+                      Description
+                    </span>
+                    <span className="mt-0.5 block text-xs text-(--color-text-secondary)">
+                      Details provided with this support request
+                    </span>
                   </span>
                 </div>
-                <Icon name="chevron" className="size-4 shrink-0 rotate-90 text-(--color-text-secondary) transition-transform group-open:-rotate-90" />
+                <Icon
+                  name="chevron"
+                  className="size-4 shrink-0 rotate-90 text-(--color-text-secondary) transition-transform group-open:-rotate-90"
+                />
               </summary>
               <div className="border-t border-(--color-border) px-4 py-3">
-                <p className="whitespace-pre-wrap wrap-break-word text-xs leading-5 text-(--color-text-secondary)">
+                <p className="text-xs leading-5 wrap-break-word whitespace-pre-wrap text-(--color-text-secondary)">
                   {ticket.description || "No description provided."}
                 </p>
               </div>
@@ -1673,7 +1817,7 @@ async function handleWorkflowAction(
                 <div className="space-y-3 p-4">
                   <div className="flex items-center gap-3">
                     <span className={chipClass}>
-                      <Icon name="transfer" className="size-[18px]" />
+                      <Icon name="transfer" className="size-4.5" />
                     </span>
                     <div>
                       <h3 className="text-sm font-semibold text-(--color-text)">
@@ -1797,11 +1941,28 @@ async function handleWorkflowAction(
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pb-2">
+            {/* NEW: Department Filter for Admins */}
+            {user.role === "master" && (
+              <select
+                value={departmentFilter}
+                onChange={(event) => setDepartmentFilter(event.target.value)}
+                aria-label="Filter by department"
+                className={compactSelectClass}
+              >
+                <option value="all">All Departments</option>
+                {uniqueDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
               aria-label="Filter by status"
-              className="h-9 rounded-xl border border-(--color-border) bg-(--color-surface) px-2.5 text-base text-(--color-text) outline-none focus:border-(--color-accent) sm:text-xs"
+              className={compactSelectClass}
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -1812,11 +1973,9 @@ async function handleWorkflowAction(
 
             <select
               value={sortOrder}
-              onChange={(event) =>
-                setSortOrder(event.target.value as SortOrder)
-              }
+              onChange={(event) => setSortOrder(event.target.value as SortOrder)}
               aria-label="Sort tickets"
-              className="h-9 rounded-xl border border-(--color-border) bg-(--color-surface) px-2.5 text-base text-(--color-text) outline-none focus:border-(--color-accent) sm:text-xs"
+              className={compactSelectClass}
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
@@ -1846,28 +2005,7 @@ async function handleWorkflowAction(
           ? "Department tickets"
           : "My tickets";
 
-    const statusGroups = [
-      { label: "New", statuses: ["open"], color: "bg-indigo-500", stroke: "stroke-indigo-500" },
-      {
-        label: "In progress",
-        statuses: ["assigned", "in_progress", "forwarding_requested"],
-        color: "bg-amber-500",
-        stroke: "stroke-amber-500",
-      },
-      {
-        label: "Awaiting response",
-        statuses: ["resolution_submitted", "resolution_pending", "transfer_pending"],
-        color: "bg-sky-500",
-        stroke: "stroke-sky-500",
-      },
-      {
-        label: "Completed",
-        statuses: ["resolved", "closed"],
-        color: "bg-emerald-500",
-        stroke: "stroke-emerald-500",
-      },
-    ];
-
+    // Same groups as the board and the filter, so every count lines up.
     const groupCounts = statusGroups.map((group) => ({
       ...group,
       count: tickets.filter((ticket) => group.statuses.includes(ticket.status))
@@ -1898,6 +2036,9 @@ async function handleWorkflowAction(
       })
       .slice(0, 5);
 
+    const countFor = (key: string) =>
+      groupCounts.find((group) => group.key === key)?.count ?? 0;
+
     const stats: {
       label: string;
       value: number;
@@ -1911,28 +2052,36 @@ async function handleWorkflowAction(
         value: total,
         description: "Total support requests",
         icon: "ticket",
-        tone: "indigo",
+        tone: "slate",
         showShare: false,
       },
       {
         label: "New",
-        value: openCount,
+        value: countFor("new"),
         description: "Waiting for assignment",
         icon: "clock",
+        tone: "indigo",
+        showShare: true,
+      },
+      {
+        label: "Open",
+        value: countFor("open"),
+        description: "Currently being handled",
+        icon: "trend",
         tone: "sky",
         showShare: true,
       },
       {
-        label: "In progress",
-        value: inProgressCount,
-        description: "Currently being handled",
-        icon: "trend",
+        label: "Resolved",
+        value: countFor("resolved"),
+        description: "Awaiting final approval",
+        icon: "check",
         tone: "amber",
         showShare: true,
       },
       {
         label: "Closed",
-        value: closedCount,
+        value: countFor("closed"),
         description: "Marked as closed",
         icon: "check",
         tone: "emerald",
@@ -2003,7 +2152,7 @@ async function handleWorkflowAction(
         {/* Stats */}
         <section
           aria-label="Ticket statistics"
-          className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 xl:grid-cols-4"
+          className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 xl:grid-cols-5"
         >
           {stats.map((stat) => {
             const tone = toneStyles[stat.tone];
@@ -2020,7 +2169,7 @@ async function handleWorkflowAction(
                     <p className="truncate text-sm font-medium text-(--color-text-secondary)">
                       {stat.label}
                     </p>
-                    <p className="mt-2 text-3xl font-bold tracking-tight tabular-nums text-(--color-text)">
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-(--color-text) tabular-nums">
                       {loadingTickets ? "—" : stat.value}
                     </p>
                   </div>
@@ -2051,6 +2200,54 @@ async function handleWorkflowAction(
           })}
         </section>
 
+        {/* NEW: Department Breakdown (Only for Admin/Master) */}
+        {user.role === "master" && departmentStats.length > 0 && (
+          <section aria-label="Department breakdown" className="space-y-3">
+            <h3 className="text-sm font-semibold text-(--color-text)">
+              Department Overview
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {departmentStats.map((dept) => (
+                <button
+                  key={dept.name}
+                  type="button"
+                  onClick={() => {
+                    setDepartmentFilter(dept.name);
+                    setStatusFilter("all");
+                    setSearchQuery("");
+                    setActivePage("tickets");
+                    setTicketView("list");
+                  }}
+                  className={`group flex flex-col p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${cardClass} ${focusRing}`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <span className="truncate text-sm font-semibold text-(--color-text)" title={dept.name}>
+                      {dept.name}
+                    </span>
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-(--color-surface-secondary) text-(--color-text-secondary) transition group-hover:bg-(--color-accent-soft) group-hover:text-(--color-accent)">
+                      <Icon name="building" className="size-4" />
+                    </span>
+                  </div>
+                  <div className="mt-4 flex items-center gap-4 text-xs">
+                    <div>
+                      <span className="block text-(--color-text-secondary)">Total</span>
+                      <span className="text-lg font-bold text-(--color-text)">{dept.total}</span>
+                    </div>
+                    <div>
+                      <span className="block text-(--color-text-secondary)">Open</span>
+                      <span className="text-lg font-bold text-sky-600">{dept.open}</span>
+                    </div>
+                    <div>
+                      <span className="block text-(--color-text-secondary)">Resolved</span>
+                      <span className="text-lg font-bold text-amber-600">{dept.resolved}</span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,0.8fr)]">
           {/* Recent tickets */}
           <section
@@ -2058,18 +2255,18 @@ async function handleWorkflowAction(
             className={`min-w-0 overflow-hidden ${cardClass}`}
           >
             <div className="flex items-center justify-between gap-3 border-b border-(--color-border) px-5 py-4">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
                 <span className={chipClass}>
-                  <Icon name="list" className="size-[18px]" />
+                  <Icon name="list" className="size-4.5" />
                 </span>
-                <div>
+                <div className="min-w-0">
                   <h3
                     id="recent-tickets-heading"
                     className="text-sm font-semibold text-(--color-text)"
                   >
                     Recent tickets
                   </h3>
-                  <p className="mt-0.5 text-xs text-(--color-text-secondary)">
+                  <p className="mt-0.5 truncate text-xs text-(--color-text-secondary)">
                     The latest support requests
                   </p>
                 </div>
@@ -2086,7 +2283,11 @@ async function handleWorkflowAction(
             </div>
 
             {loadingTickets ? (
-              <div className="space-y-4 p-5" aria-label="Loading tickets">
+              <div
+                className="space-y-4 p-5"
+                role="status"
+                aria-label="Loading tickets"
+              >
                 {[1, 2, 3, 4].map((item) => (
                   <div
                     key={item}
@@ -2150,7 +2351,9 @@ async function handleWorkflowAction(
               <div
                 className="relative mx-auto size-36"
                 role="img"
-                aria-label="Ticket status distribution"
+                aria-label={`Ticket status distribution: ${groupCounts
+                  .map((group) => `${group.title} ${group.count}`)
+                  .join(", ")}`}
               >
                 <svg viewBox="0 0 100 100" className="size-full -rotate-90">
                   <circle
@@ -2166,20 +2369,20 @@ async function handleWorkflowAction(
                       .filter((segment) => segment.length > 0)
                       .map((segment) => (
                         <circle
-                          key={segment.label}
+                          key={segment.key}
                           cx="50"
                           cy="50"
                           r={radius}
                           fill="none"
                           strokeWidth="10"
-                          className={segment.stroke}
+                          className={toneStyles[segment.tone].stroke}
                           strokeDasharray={`${segment.length} ${circumference - segment.length}`}
                           strokeDashoffset={-segment.offset}
                         />
                       ))}
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold tabular-nums text-(--color-text)">
+                  <span className="text-2xl font-bold text-(--color-text) tabular-nums">
                     {loadingTickets ? "—" : total}
                   </span>
                   <span className="text-xs text-(--color-text-secondary)">
@@ -2191,22 +2394,22 @@ async function handleWorkflowAction(
               <ul className="space-y-3">
                 {groupCounts.map((group) => (
                   <li
-                    key={group.label}
+                    key={group.key}
                     className="flex items-center justify-between gap-3 text-sm"
                   >
                     <span className="flex min-w-0 items-center gap-2.5 text-(--color-text)">
                       <span
-                        className={`size-2.5 shrink-0 rounded-full ${group.color}`}
+                        className={`size-2.5 shrink-0 rounded-full ${toneStyles[group.tone].dot}`}
                       />
-                      <span className="truncate">{group.label}</span>
+                      <span className="truncate">{group.title}</span>
                     </span>
                     <span className="flex items-baseline gap-2">
-                      <span className="text-xs tabular-nums text-(--color-text-secondary)">
+                      <span className="text-xs text-(--color-text-secondary) tabular-nums">
                         {!loadingTickets && total > 0
                           ? `${Math.round((group.count / total) * 100)}%`
                           : ""}
                       </span>
-                      <span className="w-6 text-right font-semibold tabular-nums text-(--color-text)">
+                      <span className="w-6 text-right font-semibold text-(--color-text) tabular-nums">
                         {loadingTickets ? "—" : group.count}
                       </span>
                     </span>
@@ -2218,7 +2421,10 @@ async function handleWorkflowAction(
         </div>
 
         {/* Quick actions */}
-        <section aria-label="Quick actions" className="grid gap-4 sm:grid-cols-2">
+        <section
+          aria-label="Quick actions"
+          className="grid gap-4 sm:grid-cols-2"
+        >
           {[
             {
               title: "Create a ticket",
@@ -2269,10 +2475,12 @@ async function handleWorkflowAction(
         return renderOverviewPage();
 
       case "transfers":
-        return <TicketTransfersPage
-  user={user}
-  initialTicketId={transferTicketId}
-/>;
+        return (
+          <TicketTransfersPage
+            user={user}
+            initialTicketId={transferTicketId}
+          />
+        );
 
       case "employees":
         return <EmployeesPage />;

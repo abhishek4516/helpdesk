@@ -15,13 +15,13 @@ import {
 
 const router = Router()
 
-// All department routes require authentication.
+// dept authentication.
 router.use(requireAuth)
 
-// Department listing is available to authenticated users.
+// Dept listing for authenticated users.
 router.get('/', listDepartments)
 
-// Department management is Master Admin only.
+// Department management allowed for master user only.
 router.use(requireMaster)
 
 router.post('/', createDepartment)
